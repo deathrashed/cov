@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "riley-cov-toolkit"
+name = "riley-cov-toolkit-legacy"
 version = "0.1.0"
-description = "macOS integration toolkit for the Music Hoarders COV cover search."
+description = "Legacy Python implementation of the COV integration toolkit. Superseded by the Rust rewrite in Cargo.toml."
 requires-python = ">=3.12"
 dependencies = [
   "mutagen>=1.47",

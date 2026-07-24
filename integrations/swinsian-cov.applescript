@@ -14,5 +14,5 @@ tell application "Swinsian"
 	set trackPath to path of targetTrack as text
 end tell
 
-set launcher to "/Users/rd/Scripts/Riley/audio/cov/bin/cov-open"
-return do shell script quoted form of launcher & " " & quoted form of trackPath
+set covHome to (POSIX path of (path to home folder)) & ".local/bin/cov"
+return do shell script quoted form of covHome & " open " & quoted form of trackPath

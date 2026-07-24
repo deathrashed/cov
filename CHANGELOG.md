@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.0 — 2026-07-24
+
+- Full Rust rewrite: single `cov` binary with subcommands replacing Python/zsh.
+- Added COVIT launch contract with golden tests.
+- Added pure-Rust embedding engine (lofty/image) with full format matrix.
+- Added TUI (ratatui/crossterm) with fuzzy matcher, artwork badges, Kitty/halfblock preview.
+- Added config, context, doctor, and log commands.
+- Updated integrations, documentation, and installer for Cargo workflow.
+
 ## 0.1.0 — 2026-07-24
 
 - Added official COVIT launch and persistent browser integration.

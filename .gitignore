@@ -9,3 +9,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+/target
+/bin/cov
+# Binary crate: lockfile must be committed (overrides global gitignore)
+!Cargo.lock

@@ -1,15 +1,28 @@
-.PHONY: check doctor install tui
+.PHONY: build test lint fmt verify install tui bench fixtures
 
-check:
-	zsh -n bin/* install.sh
-	/opt/homebrew/opt/python@3.12/libexec/bin/python3 -m compileall -q lib
-	plutil -lint "integrations/keyboard-maestro/COV Toolkit.kmmacros"
+build:
+	cargo build --release
+	/bin/cp -f target/release/cov bin/cov
 
-doctor:
-	./bin/cov-doctor
+test:
+	cargo test
+
+lint:
+	cargo clippy --all-targets -- -D warnings
+
+fmt:
+	cargo fmt --check
+
+verify: fmt lint test
 
 install:
 	./install.sh
 
 tui:
-	./bin/cov-tui
+	cargo run --release -- tui
+
+bench:
+	cargo bench --bench matcher
+
+fixtures:
+	zsh tests/fixtures/generate.sh

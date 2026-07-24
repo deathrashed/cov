@@ -6,5 +6,5 @@ tell application "Finder"
 	set selectedPath to POSIX path of (item 1 of selectedItems as alias)
 end tell
 
-set launcher to "/Users/rd/Scripts/Riley/audio/cov/bin/cov-open"
-return do shell script quoted form of launcher & " " & quoted form of selectedPath
+set covHome to (POSIX path of (path to home folder)) & ".local/bin/cov"
+return do shell script quoted form of covHome & " open " & quoted form of selectedPath

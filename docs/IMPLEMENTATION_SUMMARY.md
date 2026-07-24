@@ -9,16 +9,16 @@ those same commands rather than embedding duplicate AppleScript or shell logic.
 
 ## Terminal interface
 
-`lib/cov_tui.py` provides a Textual interface with source and action selection,
-direct-path metadata overrides, Doctor output, and log viewing. `cov-ghostty`
+`src/tui/` provides a Rust TUI (ratatui) with source and action selection,
+direct-path metadata overrides, Doctor output, and log viewing. `cov ghostty`
 opens it in a dedicated Ghostty window.
 
 ## Repository preparation
 
-The directory includes Python package metadata, a Makefile, changelog,
-expanded ignore rules, integration documentation, and explicit notes about the
-AMI-COV licensing boundary. Git was not initialised because the directory is
-currently nested inside the existing `/Users/rd/Scripts` worktree.
+The directory includes Rust package metadata (Cargo.toml), a Makefile,
+changelog, expanded ignore rules, integration documentation, and explicit notes about the
+AMI-COV licensing boundary. Legacy Python files are preserved in `lib/` for
+reference but are no longer the primary implementation.
 
 ## Working launch sequence
 
@@ -81,12 +81,13 @@ Passing `--primary-output cover.jpg` did not work correctly with this build.
 
 ## Embedding
 
-The official COVIT tool saves files but does not itself write audio tags. The toolkit attaches its own post-selection callback when `--embed` is requested. The callback uses Mutagen, replaces only the front-cover frame, leaves other tags intact, and then asks Swinsian to rescan updated tracks.
+The official COVIT tool saves files but does not itself write audio tags. The toolkit attaches its own post-selection callback when `--embed` is requested. The callback uses `lofty`/`image`, replaces only the front-cover frame, leaves other tags intact, and then asks Swinsian to rescan updated tracks.
 
 ## Verification completed
 
+- Rust compilation for the full crate.
+- Rust unit and integration tests pass (embedding and launcher contract).
 - Shell syntax validation for every launcher and installer.
-- Python compilation for both core modules.
 - AppleScript compilation for all Swinsian and Finder wrappers.
 - Dry-run discovery against a real six-track album.
 - Real embedding into temporary MP3, FLAC, M4A, Ogg/Opus, WAV, and AIFF fixtures.

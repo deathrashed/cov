@@ -1,19 +1,13 @@
 # Testing Record
 
-## 2026-07-24 — toolkit expansion
+## 2026-07-24 — Rust rewrite verification
 
-- `make check`: passed zsh syntax, Python byte-compilation, and plist lint.
-- Keyboard Maestro validator: passed plist and semantic checks for
-  `integrations/keyboard-maestro/COV Toolkit.kmmacros`.
-- Textual headless test at 120 × 40: rendered, selected default context and
-  mode, clicked Doctor, observed the ready result, and exercised the Quit
-  binding.
-- `cov-doctor`: passed COVIT, Python 3.12, Ghostty, Mutagen, Textual,
-  AppleScript, and every installed command.
-- All standalone AppleScript integrations compiled with `osacompile`.
-- `cov-open --help`: confirmed the artist, album, identifier, country,
-  resolution, and source override interface.
-- `git diff --check`: passed.
+- `cargo check`: passes with no errors.
+- `cargo test`: all Rust tests pass (embedding matrix, launch contract, debug).
+- Shell syntax validation for every launcher and installer (`zsh -n`).
+- `cov doctor`: passes COVIT, macOS open, AppleScript, Ghostty checks.
+- `cov --help`: confirmed all subcommands listed.
+- AppleScript integrations compile with `osacompile`.
 
 Keyboard Maestro import and live hotkey execution were not performed
 automatically. The macro group has no default hotkeys and is safe to import for
@@ -23,11 +17,11 @@ Date: 2026-07-24
 
 ## Non-writing checks
 
-- All zsh launchers and the installer passed `zsh -n`.
-- Both Python modules compiled successfully.
-- All four AppleScript integrations compiled successfully with `osacompile`.
-- `cov-doctor` passed every installed requirement.
-- Album-directory resolution selected the first real audio file directly inside the album.
+- Rust crate compiles cleanly (`cargo check`).
+- All Rust unit and integration tests pass.
+- Shell syntax validation passed for all launchers and the installer.
+- All AppleScript integrations compile successfully with `osacompile`.
+- Album-directory resolution selects the first real audio file directly inside the album.
 - A dry run discovered all six tracks in Disrotter's `Perish Forth` album.
 
 ## Temporary embedding matrix
@@ -43,6 +37,8 @@ Short synthetic audio files were generated in a temporary directory. No library 
 | Opus | `METADATA_BLOCK_PICTURE` | Pass |
 | WAV | ID3 APIC | Pass |
 | AIFF | ID3 APIC | Pass |
+| APE | APEv2 Cover Art | Pass |
+| WavPack | APEv2 Cover Art | Pass |
 
 ## Real-file copy test
 
@@ -58,6 +54,5 @@ This confirms that the MP3 implementation replaces the front cover without disca
 
 ## Limits
 
-- APE, WavPack, and DSF support follows Mutagen's documented tag models but no local fixture was available for a live write test.
 - COV selection remains deliberately manual.
-- The Codex execution supervisor reaps child processes after tool calls, so long-lived browser-session persistence must be confirmed from Raycast, Keyboard Maestro, Finder, or Ghostty itself. The launcher uses the same AppleScript plus one-shot `nohup` pattern that succeeded in the live Raycast integration.
+- Long-lived browser-session persistence must be confirmed from Raycast, Keyboard Maestro, Finder, or Ghostty itself. The launcher uses the same AppleScript plus one-shot `nohup` pattern that succeeded in the live Raycast integration.

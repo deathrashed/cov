@@ -1,21 +1,4 @@
 #!/bin/zsh
 set -eu
-
 SCRIPT_DIR=${0:A:h}
-mode=${1:-save}
-if [[ "$mode" == "embed" ]]; then
-  launcher="$SCRIPT_DIR/cov-open-embed"
-elif [[ "$mode" == "save" ]]; then
-  launcher="$SCRIPT_DIR/cov-open"
-else
-  print -u2 "Usage: cov-choose [save|embed]"
-  exit 2
-fi
-
-album_path=$(/usr/bin/osascript <<'APPLESCRIPT'
-set chosenFolder to choose folder with prompt "Choose an album folder for COV"
-return POSIX path of chosenFolder
-APPLESCRIPT
-)
-
-exec "$launcher" "$album_path"
+exec "$SCRIPT_DIR/cov" choose "$@"

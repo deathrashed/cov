@@ -1,19 +1,4 @@
 #!/bin/zsh
 set -eu
-
-log_path="${HOME}/Library/Logs/cov-toolkit.log"
-mode=${1:-show}
-
-case "$mode" in
-  show)
-    [[ -f "$log_path" ]] && /usr/bin/tail -n 120 "$log_path" || print "No COV log exists yet."
-    ;;
-  follow)
-    /usr/bin/touch "$log_path"
-    exec /usr/bin/tail -n 120 -f "$log_path"
-    ;;
-  *)
-    print -u2 "Usage: cov-log [show|follow]"
-    exit 2
-    ;;
-esac
+SCRIPT_DIR=${0:A:h}
+exec "$SCRIPT_DIR/cov" log "$@"

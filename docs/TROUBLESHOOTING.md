@@ -58,7 +58,7 @@ Do not force `cover.jpg`. COVIT appends the selected image's real extension.
 Run the callback directly:
 
 ```sh
-cov-embed "/path/to/cover.jpg" "/path/to/album"
+cov embed "/path/to/cover.jpg" "/path/to/album"
 ```
 
 Check:
@@ -66,6 +66,5 @@ Check:
 - The cover is JPEG or PNG.
 - The files are writable.
 - The format is listed in README.
-- Mutagen is installed for Python 3.12.
 
 Use `--dry-run` to verify target discovery without writing tags.

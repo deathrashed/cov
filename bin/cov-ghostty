@@ -1,5 +1,4 @@
 #!/bin/zsh
 set -eu
-
 SCRIPT_DIR=${0:A:h}
-exec /usr/bin/open -na Ghostty.app --args -e "$SCRIPT_DIR/cov-tui"
+exec "$SCRIPT_DIR/cov" ghostty "$@"

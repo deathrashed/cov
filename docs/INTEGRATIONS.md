@@ -30,19 +30,19 @@ Use the same process with `integrations/finder-cov.applescript` or `integrations
 ## Finder Quick Action
 
 1. Open Automator and create a **Quick Action**.
-2. Set “Workflow receives current” to **files or folders** in **Finder**.
+2. Set "Workflow receives current" to **files or folders** in **Finder**.
 3. Add **Run Shell Script**.
-4. Choose “Pass input: as arguments”.
+4. Choose "Pass input: as arguments".
 5. Use:
 
 ```sh
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open "$1"
+~/.local/bin/cov open "$1"
 ```
 
 For embedding:
 
 ```sh
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed "$1"
+~/.local/bin/cov open --embed "$1"
 ```
 
 The action then appears in Finder's Quick Actions and Services menus.
@@ -52,22 +52,21 @@ The action then appears in Finder's Quick Actions and Services menus.
 After running `install.sh`, the commands are globally available:
 
 ```sh
-cov-open "/path/to/audio-or-album"
-cov-open-embed "/path/to/audio-or-album"
-cov-finder embed
-cov-choose save
-cov-choose embed
-cov-clipboard save
-cov-context save
-cov-tui
+cov open "/path/to/audio-or-album"
+cov open --embed "/path/to/audio-or-album"
+cov finder embed
+cov choose save
+cov choose embed
+cov clipboard save
+cov context save
+cov tui
 ```
 
 Useful zsh aliases:
 
 ```sh
-alias cov='/Users/rd/Scripts/Riley/audio/cov/bin/cov-open'
-alias cove='/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed'
-alias covui='/Users/rd/Scripts/Riley/audio/cov/bin/cov-tui'
+alias cov='/Users/rd/.local/bin/cov'
+alias covui='/Users/rd/.local/bin/cov tui'
 ```
 
 ## Raycast
@@ -81,13 +80,13 @@ Do not pass `--browsers safari` or `--browsers chrome`. Let COVIT use the defaul
 Any application capable of passing a file path can call:
 
 ```text
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open "<path>"
+~/.local/bin/cov open "<path>"
 ```
 
 or:
 
 ```text
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed "<path>"
+~/.local/bin/cov open --embed "<path>"
 ```
 
 The application should wait only for the launcher script. The COVIT session continues independently.

@@ -1,0 +1,31 @@
+# themes/default.toml
+[general]
+background = "#101319"
+foreground = "#e8eaf0"
+border = "#334155"
+border_focused = "#01acd7"
+
+[input]
+prompt = "#01acd7"
+text = "#e8eaf0"
+cursor = "#87d7ff"
+
+[list]
+text = "#e8eaf0"
+selected_bg = "#1e2a3a"
+selected_fg = "#87d7ff"
+match_fg = "#01acd7"
+badge_missing = "#e06c75"
+badge_sidecar = "#e5c07b"
+badge_partial = "#d19a66"
+badge_complete = "#98c379"
+badge_checking = "#5c6370"
+
+[preview]
+title = "#87d7ff"
+label = "#5c6370"
+value = "#e8eaf0"
+
+[footer]
+key = "#01acd7"
+text = "#5c6370"
