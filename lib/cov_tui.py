@@ -464,8 +464,20 @@ class CovToolkitApp(App[None]):
         self.query_one("#log", RichLog).clear()
 
     def command(self) -> list[str]:
-        source = str(self.query_one("#source", Select).value)
-        mode = str(self.query_one("#mode", Select).value)
+        valid_sources = {"context", "path", "swinsian", "finder", "choose", "clipboard"}
+        valid_modes = {"save", "embed"}
+
+        source_val = self.query_one("#source", Select).value
+        mode_val = self.query_one("#mode", Select).value
+
+        source = str(source_val) if type(source_val).__name__ != "NoSelection" and source_val is not Select.BLANK and source_val is not None else ""
+        mode = str(mode_val) if type(mode_val).__name__ != "NoSelection" and mode_val is not Select.BLANK and mode_val is not None else ""
+
+        if not source or source not in valid_sources or "Select." in source or "NULL" in source:
+            raise ValueError("Please select a valid Workflow Source Target.")
+        if not mode or mode not in valid_modes or "Select." in mode or "NULL" in mode:
+            raise ValueError("Please select a valid Action Mode.")
+
         if source == "path":
             path = self.query_one("#inline-fuzzy-input", Input).value.strip()
             if not path:
