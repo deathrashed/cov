@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 from textual.app import App, ComposeResult
+from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.design import ColorSystem
 from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select
@@ -18,6 +20,18 @@ BIN = ROOT / "bin"
 
 # Built-in themes using Textual's design tokens
 THEMES: dict[str, dict[str, str]] = {
+    "cobalt": {
+        "primary": "#38bdf8",
+        "secondary": "#818cf8",
+        "accent": "#f472b6",
+        "background": "#0f172a",
+        "surface": "#1e293b",
+        "panel": "#334155",
+        "warning": "#fbbf24",
+        "error": "#f43f5e",
+        "success": "#34d399",
+        "dark": True,
+    },
     "nord": {
         "primary": "#88c0d0",
         "secondary": "#81a1c1",
@@ -40,18 +54,6 @@ THEMES: dict[str, dict[str, str]] = {
         "warning": "#fd971f",
         "error": "#f92672",
         "success": "#a6e22e",
-        "dark": True,
-    },
-    "cobalt": {
-        "primary": "#38bdf8",
-        "secondary": "#818cf8",
-        "accent": "#f472b6",
-        "background": "#0f172a",
-        "surface": "#1e293b",
-        "panel": "#334155",
-        "warning": "#fbbf24",
-        "error": "#f43f5e",
-        "success": "#34d399",
         "dark": True,
     },
     "emerald": {
@@ -81,9 +83,91 @@ THEMES: dict[str, dict[str, str]] = {
 }
 
 
+class CovCommandProvider(Provider):
+    """Custom command provider exposing all actions, options, themes, and settings."""
+
+    async def discover(self) -> Hits:
+        app = self.app
+        assert isinstance(app, CovToolkitApp)
+
+        # Core execution actions
+        yield DiscoveryHit(
+            "Launch COV Search",
+            app.launch_cov,
+            help="Start COVIT process and launch browser cover search",
+        )
+        yield DiscoveryHit(
+            "Run Doctor Diagnostics",
+            app.run_doctor,
+            help="Verify dependencies, binaries, and local path tools",
+        )
+        yield DiscoveryHit(
+            "Show Live Log Output",
+            app.show_log,
+            help="Fetch live output from ~/Library/Logs/cov-toolkit.log",
+        )
+        yield DiscoveryHit(
+            "Clear Console Log",
+            app.action_clear_log,
+            help="Clear the output log panel view",
+        )
+
+        # Workflow Target Options
+        sources = [
+            ("Automatic Context (Swinsian/Finder/Clipboard)", "context"),
+            ("Direct Path (Audio file or Album folder)", "path"),
+            ("Swinsian Selection / Playing Track", "swinsian"),
+            ("Finder Selection", "finder"),
+            ("Browse Folder (Native Chooser)...", "choose"),
+            ("Clipboard Path Text", "clipboard"),
+        ]
+        for name, value in sources:
+            yield DiscoveryHit(
+                f"Source: {name}",
+                lambda val=value: app.set_source_target(val),
+                help=f"Set workflow source target to {name}",
+            )
+
+        # Action Modes
+        modes = [
+            ("Save Sidecar Cover Beside Album", "save"),
+            ("Save Cover & Embed into All Album Tracks", "embed"),
+        ]
+        for name, value in modes:
+            yield DiscoveryHit(
+                f"Mode: {name}",
+                lambda val=value: app.set_action_mode(val),
+                help=f"Set artwork action mode to {name}",
+            )
+
+        # Color Themes
+        for theme_name in THEMES.keys():
+            yield DiscoveryHit(
+                f"Theme: Switch to {theme_name.upper()}",
+                lambda t=theme_name: app.apply_theme(t),
+                help=f"Change UI color palette to {theme_name.upper()}",
+            )
+
+        # Application control
+        yield DiscoveryHit(
+            "Quit Application",
+            app.action_quit,
+            help="Close the COV Artwork Toolkit interface",
+        )
+
+    async def search(self, query: str) -> Hits:
+        matcher = self.matcher(query)
+        async for hit in self.discover():
+            match_score = matcher.match(hit.text)
+            if match_score > 0:
+                hit.score = match_score
+                yield hit
+
+
 class CovToolkitApp(App[None]):
     TITLE = "COV Artwork Toolkit"
     SUB_TITLE = "Search, save, and embed high-res album artwork"
+    COMMANDS = {CovCommandProvider}
 
     CSS = """
     Screen {
@@ -130,10 +214,10 @@ class CovToolkitApp(App[None]):
     }
 
     .group-box {
-        background: $panel 40%;
+        background: $panel 30%;
         border: round $primary 30%;
         padding: 0 1;
-        margin-top: 1;
+        margin-top: 0;
         margin-bottom: 1;
         height: auto;
     }
@@ -178,14 +262,15 @@ class CovToolkitApp(App[None]):
 
     #actions-box {
         height: auto;
-        padding: 1 0 0 0;
+        padding: 0;
     }
 
     Button {
         margin-right: 1;
-        min-width: 12;
-        height: 3;
+        min-width: 10;
+        height: 1;
         border: none;
+        padding: 0 1;
     }
 
     #launch {
@@ -196,15 +281,6 @@ class CovToolkitApp(App[None]):
 
     #launch:hover {
         background: $primary-lighten-1;
-    }
-
-    #doctor {
-        background: $panel;
-        color: $text;
-    }
-
-    #doctor:hover {
-        background: $panel-lighten-1;
     }
 
     #show-log {
@@ -232,6 +308,20 @@ class CovToolkitApp(App[None]):
         color: $text;
         padding: 1;
     }
+
+    /* Centered Command Palette Popup Overlays */
+    CommandPalette {
+        background: black 60%;
+    }
+
+    CommandPalette > Vertical {
+        background: $surface;
+        border: round $primary;
+        width: 60%;
+        height: 60%;
+        align: center middle;
+        margin: auto;
+    }
     """
 
     BINDINGS = [
@@ -239,7 +329,8 @@ class CovToolkitApp(App[None]):
         ("d", "doctor", "Doctor"),
         ("l", "launch", "Launch"),
         ("c", "clear_log", "Clear Log"),
-        ("t", "next_theme", "Switch Theme"),
+        ("t", "next_theme", "Theme"),
+        ("f,ctrl+p", "command_palette", "Palette"),
     ]
 
     def __init__(self) -> None:
@@ -273,6 +364,14 @@ class CovToolkitApp(App[None]):
         new_theme = theme_names[idx]
         self.apply_theme(new_theme)
         self.write(f"[bold $accent]Switched Theme:[/bold $accent] [italic]{new_theme.upper()}[/italic]")
+
+    def set_source_target(self, value: str) -> None:
+        self.query_one("#source", Select).value = value
+        self.write(f"[bold $primary]Source Target Set:[/bold $primary] {value}")
+
+    def set_action_mode(self, value: str) -> None:
+        self.query_one("#mode", Select).value = value
+        self.write(f"[bold $primary]Action Mode Set:[/bold $primary] {value}")
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -314,23 +413,8 @@ class CovToolkitApp(App[None]):
                     yield Input(placeholder="Preferred Resolution (e.g. 1500)", id="resolution")
                     yield Input(placeholder="COV Source IDs (comma-separated)", id="sources")
 
-                with Vertical(classes="group-box"):
-                    yield Label("UI Color Theme", classes="group-title")
-                    yield Select(
-                        [
-                            ("Cobalt (Default Dark Slate/Cyan)", "cobalt"),
-                            ("Nord (Muted Arctic Blue)", "nord"),
-                            ("Monokai (Vibrant Pink/Green)", "monokai"),
-                            ("Emerald (Deep Ocean Green)", "emerald"),
-                            ("Dracula (Purple/Pink Gothic)", "dracula"),
-                        ],
-                        value="cobalt",
-                        id="theme-select",
-                    )
-
                 with Horizontal(id="actions-box"):
                     yield Button("Launch COV", id="launch", variant="primary")
-                    yield Button("Doctor", id="doctor")
                     yield Button("Show Log", id="show-log")
                     yield Button("Quit", id="quit", variant="error")
 
@@ -391,26 +475,23 @@ class CovToolkitApp(App[None]):
         completed = subprocess.run([str(BIN / "cov-log")], capture_output=True, text=True, check=False)
         self.write(completed.stdout.strip())
 
-    def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id == "theme-select" and event.value != Select.BLANK:
-            self.apply_theme(str(event.value))
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         match event.button.id:
             case "launch":
                 self.launch_cov()
-            case "doctor":
-                self.run_doctor()
             case "show-log":
                 self.show_log()
             case "quit":
-                self.exit()
+                self.action_quit()
 
     def action_launch(self) -> None:
         self.launch_cov()
 
     def action_doctor(self) -> None:
         self.run_doctor()
+
+    def action_quit(self) -> None:
+        self.exit()
 
 
 def main() -> None:
