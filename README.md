@@ -19,7 +19,8 @@
     <a href="#repository-structure">Structure</a> |
     <a href="#integrations">Integrations</a> |
     <a href="#embedding--audio-support">Embedding</a> |
-    <a href="#documentation--logs">Docs & Logs</a>
+    <a href="#documentation--logs">Docs & Logs</a> |
+    <a href="#license">License</a>
   </p>
 </div>
 
@@ -195,3 +196,10 @@ Live launcher output is stored at `~/Library/Logs/cov-toolkit.log`. View logs wi
 ```bash
 cov-log follow
 ```
+
+---
+
+## <a id="license"></a><img src="https://api.iconify.design/mdi:certificate-outline.svg?color=%2301acd7" height="22"> License
+
+This project is licensed under the [WTFPL Version 2](LICENSE) (Do What The Fuck You Want To Public License).
+
