@@ -10,6 +10,7 @@
     <a href="https://python.org"><img src="https://img.shields.io/badge/python-3.12-1e1e1e?style=for-the-badge&logo=python&logoColor=01acd7" alt="Python 3.12"></a>
     <a href="https://covers.musichoarders.xyz/"><img src="https://img.shields.io/badge/executable-COVIT-1e1e1e?style=for-the-badge&logo=codecrafters&logoColor=01acd7" alt="COVIT"></a>
     <a href="https://github.com/beetbox/mutagen"><img src="https://img.shields.io/badge/tagging-mutagen-1e1e1e?style=for-the-badge&logo=pypi&logoColor=01acd7" alt="Mutagen"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-WTFPL-1e1e1e?style=for-the-badge&logo=opensourceinitiative&logoColor=01acd7" alt="License: WTFPL"></a>
   </p>
 
   <p>

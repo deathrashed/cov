@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "riley-cov-toolkit"
 version = "0.1.0"
 description = "macOS integration toolkit for the Music Hoarders COV cover search."
+license = { text = "WTFPL" }
 requires-python = ">=3.12"
 dependencies = [
   "mutagen>=1.47",
