@@ -1,0 +1,23 @@
+#!/bin/zsh
+set -eu
+
+SCRIPT_DIR=${0:A:h}
+mode=${1:-save}
+frontmost=$(/usr/bin/osascript -e 'tell application "System Events" to name of first application process whose frontmost is true')
+
+case "$frontmost" in
+  Swinsian)
+    exec "$SCRIPT_DIR/cov-swinsian" "$mode"
+    ;;
+  Finder)
+    exec "$SCRIPT_DIR/cov-finder" "$mode"
+    ;;
+esac
+
+clipboard_path=$(/usr/bin/pbpaste)
+if [[ -n "$clipboard_path" && -e "${clipboard_path/#\~/$HOME}" ]]; then
+  exec "$SCRIPT_DIR/cov-clipboard" "$mode"
+fi
+
+print -u2 "No usable context found. Select a track in Swinsian or Finder, or copy a path."
+exit 1

@@ -1,0 +1,6 @@
+#!/bin/zsh
+set -eu
+
+SCRIPT_DIR=${0:A:h}
+ROOT=${SCRIPT_DIR:h}
+exec /opt/homebrew/opt/python@3.12/libexec/bin/python3 "$ROOT/lib/cov_launcher.py" "$@"

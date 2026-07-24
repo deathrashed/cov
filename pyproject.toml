@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "riley-cov-toolkit"
+version = "0.1.0"
+description = "macOS integration toolkit for the Music Hoarders COV cover search."
+requires-python = ">=3.12"
+dependencies = [
+  "mutagen>=1.47",
+  "textual>=8,<9",
+]
+
+[project.scripts]
+cov-tui-python = "lib.cov_tui:main"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

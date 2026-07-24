@@ -1,0 +1,19 @@
+#!/bin/zsh
+set -eu
+
+SCRIPT_DIR=${0:A:h}
+mode=${1:-save}
+clipboard_path=$(/usr/bin/pbpaste)
+if [[ -z "$clipboard_path" ]]; then
+  print -u2 "The clipboard does not contain a path."
+  exit 1
+fi
+
+if [[ "$mode" == "embed" ]]; then
+  exec "$SCRIPT_DIR/cov-open-embed" "$clipboard_path"
+elif [[ "$mode" == "save" ]]; then
+  exec "$SCRIPT_DIR/cov-open" "$clipboard_path"
+else
+  print -u2 "Usage: cov-clipboard [save|embed]"
+  exit 2
+fi

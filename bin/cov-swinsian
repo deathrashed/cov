@@ -1,0 +1,34 @@
+#!/bin/zsh
+set -eu
+
+SCRIPT_DIR=${0:A:h}
+mode=${1:-save}
+if [[ "$mode" == "embed" ]]; then
+  launcher="$SCRIPT_DIR/cov-open-embed"
+elif [[ "$mode" == "save" ]]; then
+  launcher="$SCRIPT_DIR/cov-open"
+else
+  print -u2 "Usage: cov-swinsian [save|embed]"
+  exit 2
+fi
+
+track_path=$(/usr/bin/osascript <<'APPLESCRIPT'
+tell application "Swinsian"
+  if not running then error "Swinsian is not running."
+  set chosenTrack to missing value
+  try
+    set selectedTracks to selection of front window
+    if selectedTracks is not {} then set chosenTrack to item 1 of selectedTracks
+  end try
+  if chosenTrack is missing value then
+    try
+      set chosenTrack to current track
+    end try
+  end if
+  if chosenTrack is missing value then error "Select or play a track in Swinsian first."
+  return path of chosenTrack as text
+end tell
+APPLESCRIPT
+)
+
+exec "$launcher" "$track_path"

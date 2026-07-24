@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>Activate</key>
+    <string>Normal</string>
+    <key>CreationDate</key>
+    <real>806000000</real>
+    <key>Macros</key>
+    <array>
+      <dict>
+        <key>Actions</key>
+        <array>
+          <dict>
+            <key>ActionUID</key><integer>167240001</integer>
+            <key>DisplayKind</key><string>Window</string>
+            <key>HonourFailureSettings</key><true/>
+            <key>IncludeStdErr</key><true/>
+            <key>IncludedVariables</key><array/>
+            <key>MacroActionType</key><string>ExecuteShellScript</string>
+            <key>Path</key><string></string>
+            <key>Source</key><string>Nothing</string>
+            <key>Text</key><string>/Users/rd/Scripts/Riley/audio/cov/bin/cov-context save</string>
+            <key>TimeOutAbortsMacro</key><true/>
+            <key>TrimResults</key><true/>
+            <key>TrimResultsNew</key><true/>
+            <key>UseText</key><true/>
+          </dict>
+        </array>
+        <key>CreationDate</key><real>806000001</real>
+        <key>ModificationDate</key><real>806000001</real>
+        <key>Name</key><string>COV — Automatic Context</string>
+        <key>Triggers</key><array/>
+        <key>UID</key><string>0EC77928-C625-41F2-A1A6-4BAA92E59E21</string>
+      </dict>
+      <dict>
+        <key>Actions</key>
+        <array>
+          <dict>
+            <key>ActionUID</key><integer>167240002</integer>
+            <key>DisplayKind</key><string>Window</string>
+            <key>HonourFailureSettings</key><true/>
+            <key>IncludeStdErr</key><true/>
+            <key>IncludedVariables</key><array/>
+            <key>MacroActionType</key><string>ExecuteShellScript</string>
+            <key>Path</key><string></string>
+            <key>Source</key><string>Nothing</string>
+            <key>Text</key><string>/Users/rd/Scripts/Riley/audio/cov/bin/cov-swinsian save</string>
+            <key>TimeOutAbortsMacro</key><true/>
+            <key>TrimResults</key><true/>
+            <key>TrimResultsNew</key><true/>
+            <key>UseText</key><true/>
+          </dict>
+        </array>
+        <key>CreationDate</key><real>806000002</real>
+        <key>ModificationDate</key><real>806000002</real>
+        <key>Name</key><string>COV — Swinsian (Save)</string>
+        <key>Triggers</key><array/>
+        <key>UID</key><string>611166A9-9668-4A78-B52F-2EDDCA3A9CF3</string>
+      </dict>
+      <dict>
+        <key>Actions</key>
+        <array>
+          <dict>
+            <key>ActionUID</key><integer>167240003</integer>
+            <key>DisplayKind</key><string>Window</string>
+            <key>HonourFailureSettings</key><true/>
+            <key>IncludeStdErr</key><true/>
+            <key>IncludedVariables</key><array/>
+            <key>MacroActionType</key><string>ExecuteShellScript</string>
+            <key>Path</key><string></string>
+            <key>Source</key><string>Nothing</string>
+            <key>Text</key><string>/Users/rd/Scripts/Riley/audio/cov/bin/cov-swinsian embed</string>
+            <key>TimeOutAbortsMacro</key><true/>
+            <key>TrimResults</key><true/>
+            <key>TrimResultsNew</key><true/>
+            <key>UseText</key><true/>
+          </dict>
+        </array>
+        <key>CreationDate</key><real>806000003</real>
+        <key>ModificationDate</key><real>806000003</real>
+        <key>Name</key><string>COV — Swinsian (Save &amp; Embed)</string>
+        <key>Triggers</key><array/>
+        <key>UID</key><string>E105117C-B99D-47F0-A5A0-AB4AF2779CBF</string>
+      </dict>
+      <dict>
+        <key>Actions</key>
+        <array>
+          <dict>
+            <key>ActionUID</key><integer>167240004</integer>
+            <key>DisplayKind</key><string>Window</string>
+            <key>HonourFailureSettings</key><true/>
+            <key>IncludeStdErr</key><true/>
+            <key>IncludedVariables</key><array/>
+            <key>MacroActionType</key><string>ExecuteShellScript</string>
+            <key>Path</key><string></string>
+            <key>Source</key><string>Nothing</string>
+            <key>Text</key><string>/Users/rd/Scripts/Riley/audio/cov/bin/cov-finder embed</string>
+            <key>TimeOutAbortsMacro</key><true/>
+            <key>TrimResults</key><true/>
+            <key>TrimResultsNew</key><true/>
+            <key>UseText</key><true/>
+          </dict>
+        </array>
+        <key>CreationDate</key><real>806000004</real>
+        <key>ModificationDate</key><real>806000004</real>
+        <key>Name</key><string>COV — Finder (Save &amp; Embed)</string>
+        <key>Triggers</key><array/>
+        <key>UID</key><string>B1612F8A-9737-48B5-A193-74EF840FD1CC</string>
+      </dict>
+      <dict>
+        <key>Actions</key>
+        <array>
+          <dict>
+            <key>ActionUID</key><integer>167240005</integer>
+            <key>DisplayKind</key><string>Window</string>
+            <key>HonourFailureSettings</key><true/>
+            <key>IncludeStdErr</key><true/>
+            <key>IncludedVariables</key><array/>
+            <key>MacroActionType</key><string>ExecuteShellScript</string>
+            <key>Path</key><string></string>
+            <key>Source</key><string>Nothing</string>
+            <key>Text</key><string>/Users/rd/Scripts/Riley/audio/cov/bin/cov-ghostty</string>
+            <key>TimeOutAbortsMacro</key><true/>
+            <key>TrimResults</key><true/>
+            <key>TrimResultsNew</key><true/>
+            <key>UseText</key><true/>
+          </dict>
+        </array>
+        <key>CreationDate</key><real>806000005</real>
+        <key>ModificationDate</key><real>806000005</real>
+        <key>Name</key><string>COV — Open Toolkit in Ghostty</string>
+        <key>Triggers</key><array/>
+        <key>UID</key><string>11EC0C3F-A124-4B2B-A01D-1EF756172CBF</string>
+      </dict>
+    </array>
+    <key>Name</key>
+    <string>COV Toolkit</string>
+    <key>ToggleMacroUID</key>
+    <string>1084926A-D26A-4E45-9FA4-AB15F0FBA2F2</string>
+    <key>UID</key>
+    <string>3F732AFE-E07D-4A60-8D24-CA7F121ACB1B</string>
+  </dict>
+</array>
+</plist>

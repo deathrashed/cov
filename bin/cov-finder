@@ -1,0 +1,24 @@
+#!/bin/zsh
+set -eu
+
+SCRIPT_DIR=${0:A:h}
+mode=${1:-save}
+if [[ "$mode" == "embed" ]]; then
+  launcher="$SCRIPT_DIR/cov-open-embed"
+elif [[ "$mode" == "save" ]]; then
+  launcher="$SCRIPT_DIR/cov-open"
+else
+  print -u2 "Usage: cov-finder [save|embed]"
+  exit 2
+fi
+
+selected_path=$(/usr/bin/osascript <<'APPLESCRIPT'
+tell application "Finder"
+  set selectedItems to selection
+  if selectedItems is {} then error "Select an audio file or album folder in Finder first."
+  return POSIX path of (item 1 of selectedItems as alias)
+end tell
+APPLESCRIPT
+)
+
+exec "$launcher" "$selected_path"
