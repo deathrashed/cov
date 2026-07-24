@@ -6,5 +6,5 @@ tell application "Finder"
 	set selectedPath to POSIX path of (item 1 of selectedItems as alias)
 end tell
 
-set launcher to "/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed"
+set launcher to (do shell script "which cov-open-embed || echo ~/.local/bin/cov-open-embed")
 return do shell script quoted form of launcher & " " & quoted form of selectedPath

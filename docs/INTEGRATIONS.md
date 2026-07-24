@@ -36,13 +36,13 @@ Use the same process with `integrations/finder-cov.applescript` or `integrations
 5. Use:
 
 ```sh
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open "$1"
+cov-open "$1"
 ```
 
 For embedding:
 
 ```sh
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed "$1"
+cov-open-embed "$1"
 ```
 
 The action then appears in Finder's Quick Actions and Services menus.
@@ -65,9 +65,9 @@ cov-tui
 Useful zsh aliases:
 
 ```sh
-alias cov='/Users/rd/Scripts/Riley/audio/cov/bin/cov-open'
-alias cove='/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed'
-alias covui='/Users/rd/Scripts/Riley/audio/cov/bin/cov-tui'
+alias cov='cov-open'
+alias cove='cov-open-embed'
+alias covui='cov-tui'
 ```
 
 ## Raycast
@@ -81,13 +81,13 @@ Do not pass `--browsers safari` or `--browsers chrome`. Let COVIT use the defaul
 Any application capable of passing a file path can call:
 
 ```text
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open "<path>"
+cov-open "<path>"
 ```
 
 or:
 
 ```text
-/Users/rd/Scripts/Riley/audio/cov/bin/cov-open-embed "<path>"
+cov-open-embed "<path>"
 ```
 
 The application should wait only for the launcher script. The COVIT session continues independently.

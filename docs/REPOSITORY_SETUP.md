@@ -1,15 +1,11 @@
 # Repository Setup
 
-This directory is ready to become a standalone repository, but it has not been
-initialised automatically because it currently lives inside
-`/Users/rd/Scripts`, an existing Git worktree.
+This repository can be cloned or placed in any location on macOS.
 
-When ready:
+When initializing a new clone:
 
 ```sh
-cd /Users/rd/Scripts/Riley/audio/cov
-git init
-git add .
+cd /path/to/cov
 git status
 ```
 

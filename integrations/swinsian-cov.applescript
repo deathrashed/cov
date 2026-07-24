@@ -14,5 +14,5 @@ tell application "Swinsian"
 	set trackPath to path of targetTrack as text
 end tell
 
-set launcher to "/Users/rd/Scripts/Riley/audio/cov/bin/cov-open"
+set launcher to (do shell script "which cov-open || echo ~/.local/bin/cov-open")
 return do shell script quoted form of launcher & " " & quoted form of trackPath

@@ -19,9 +19,7 @@ cov-open "/path/to/album" \
 
 The same fields are available in the TUI for direct paths.
 
-The detailed local reference used while designing these controls is:
-
-`/Users/rd/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Documentation/Wiki/Music Hoarders/COV.md`
+The detailed reference used while designing these controls is documented in the Music Hoarders COV specification.
 
 ## AMI-COV
 
@@ -36,7 +34,3 @@ without maintaining a second WebSocket implementation.
 AMI-COV is AGPL-3.0 software. No AMI-COV source code has been copied into this
 toolkit. If its client/server implementation is incorporated later, the new
 repository's licence and distribution obligations must be decided first.
-
-Reviewed local prior art:
-
-`/Users/rd/Library/Mobile Documents/iCloud~md~obsidian/Documents/Obsidian/Apple/Applications/Music/Picard/Tools/ami-main/ami-cov/`

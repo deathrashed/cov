@@ -17,8 +17,7 @@ opens it in a dedicated Ghostty window.
 
 The directory includes Python package metadata, a Makefile, changelog,
 expanded ignore rules, integration documentation, and explicit notes about the
-AMI-COV licensing boundary. Git was not initialised because the directory is
-currently nested inside the existing `/Users/rd/Scripts` worktree.
+AMI-COV licensing boundary.
 
 ## Working launch sequence
 
