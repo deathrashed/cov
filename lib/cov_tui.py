@@ -74,7 +74,7 @@ THEMES: dict[str, dict[str, str]] = {
 
 
 class PathFuzzyFinderModal(ModalScreen[str]):
-    """Fuzzy directory & audio file picker modal popup."""
+    """Fuzzy directory & audio file picker modal popup with live text input."""
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel Modal", key_display="esc"),
@@ -100,6 +100,19 @@ class PathFuzzyFinderModal(ModalScreen[str]):
         color: $primary;
         text-style: bold;
         margin-bottom: 1;
+    }
+
+    #fuzzy-filter-input {
+        background: $background;
+        border: tall $primary 40%;
+        color: $text;
+        height: 3;
+        padding: 0 1;
+        margin-bottom: 1;
+    }
+
+    #fuzzy-filter-input:focus {
+        border: tall $accent;
     }
 
     #fuzzy-tree {
@@ -140,10 +153,20 @@ class PathFuzzyFinderModal(ModalScreen[str]):
     def compose(self) -> ComposeResult:
         with Vertical(id="fuzzy-picker-dialog"):
             yield Label("Fuzzy Path Finder (Select Audio File or Album Directory)", id="fuzzy-title")
+            yield Input(placeholder="Type path or filter directory...", value=str(self.root_path), id="fuzzy-filter-input")
             yield DirectoryTree(str(self.root_path), id="fuzzy-tree")
             with Horizontal(id="fuzzy-actions"):
                 yield Button("Select Path", id="fuzzy-select-btn", variant="primary")
                 yield Button("Cancel", id="fuzzy-cancel-btn", variant="error")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "fuzzy-filter-input":
+            val = event.value.strip()
+            if val:
+                p = Path(val).expanduser().resolve()
+                if p.exists() and p.is_dir():
+                    tree = self.query_one("#fuzzy-tree", DirectoryTree)
+                    tree.path = p
 
     def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
         event.stop()
@@ -151,14 +174,20 @@ class PathFuzzyFinderModal(ModalScreen[str]):
 
     def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
         event.stop()
+        input_widget = self.query_one("#fuzzy-filter-input", Input)
+        input_widget.value = str(event.path)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "fuzzy-select-btn":
-            tree = self.query_one("#fuzzy-tree", DirectoryTree)
-            if tree.cursor_node and tree.cursor_node.data:
-                self.dismiss(str(tree.cursor_node.data.path))
+            val = self.query_one("#fuzzy-filter-input", Input).value.strip()
+            if val:
+                self.dismiss(str(Path(val).expanduser().resolve()))
             else:
-                self.dismiss(str(self.root_path))
+                tree = self.query_one("#fuzzy-tree", DirectoryTree)
+                if tree.cursor_node and tree.cursor_node.data:
+                    self.dismiss(str(tree.cursor_node.data.path))
+                else:
+                    self.dismiss(str(self.root_path))
         elif event.button.id == "fuzzy-cancel-btn":
             self.dismiss("")
 
@@ -291,9 +320,24 @@ class CovToolkitApp(App[None]):
         margin-right: 1;
     }
 
-    #log-column {
+    #right-column {
         width: 1fr;
         height: 100%;
+    }
+
+    #overrides-panel {
+        height: auto;
+        max-height: 50%;
+        background: $surface;
+        border: round $primary 50%;
+        border-title-color: $primary;
+        border-title-style: bold;
+        padding: 0 1;
+        margin-bottom: 1;
+    }
+
+    #log-panel {
+        height: 1fr;
         background: $surface;
         border: round $primary 50%;
         border-title-color: $accent;
@@ -371,15 +415,6 @@ class CovToolkitApp(App[None]):
         background: $primary-lighten-1;
     }
 
-    #fuzzy-btn {
-        background: $panel;
-        color: $accent;
-    }
-
-    #fuzzy-btn:hover {
-        background: $panel-lighten-1;
-    }
-
     #show-log {
         background: $panel;
         color: $text;
@@ -427,7 +462,7 @@ class CovToolkitApp(App[None]):
         Binding("p", "open_fuzzy_finder", "Fuzzy Finder", show=True),
         Binding("c", "clear_log", "Clear Log", show=True),
         Binding("t", "next_theme", "Theme", show=True),
-        Binding("f,ctrl+p", "command_palette", "Command Palette", show=True),
+        Binding("ctrl+p", "command_palette", "Command Palette", show=True),
     ]
 
     def __init__(self) -> None:
@@ -498,8 +533,12 @@ class CovToolkitApp(App[None]):
                         value="context",
                         id="source",
                     )
-                    yield Label("Target Audio/Directory Path", classes="field-label")
-                    yield Input(placeholder="/Volumes/Audio/Artist/Album", id="path")
+
+                with Vertical(classes="group-box"):
+                    yield Label("Fuzzy Path Finder & Target Path", classes="group-title")
+                    yield Label("Direct Path Selection", classes="field-label")
+                    yield Input(placeholder="/Volumes/Audio/Artist/Album (or press 'p' for Fuzzy Finder)", id="path")
+                    yield Button("Open Fuzzy Path Finder", id="fuzzy-btn", variant="primary")
 
                 with Vertical(classes="group-box"):
                     yield Label("Action & Output Mode", classes="group-title")
@@ -512,7 +551,13 @@ class CovToolkitApp(App[None]):
                         id="mode",
                     )
 
-                with Vertical(classes="group-box"):
+                with Horizontal(id="actions-box"):
+                    yield Button("Launch COV", id="launch", variant="primary")
+                    yield Button("Show Log", id="show-log")
+                    yield Button("Quit", id="quit", variant="error")
+
+            with Vertical(id="right-column"):
+                with VerticalScroll(id="overrides-panel"):
                     yield Label("Optional Search Overrides", classes="group-title")
                     yield Input(placeholder="Artist Name", id="artist")
                     yield Input(placeholder="Album Title", id="album")
@@ -520,15 +565,9 @@ class CovToolkitApp(App[None]):
                     yield Input(placeholder="Preferred Resolution (e.g. 1500)", id="resolution")
                     yield Input(placeholder="COV Source IDs (comma-separated)", id="sources")
 
-                with Horizontal(id="actions-box"):
-                    yield Button("Launch COV", id="launch", variant="primary")
-                    yield Button("Fuzzy Finder", id="fuzzy-btn")
-                    yield Button("Show Log", id="show-log")
-                    yield Button("Quit", id="quit", variant="error")
-
-            with Vertical(id="log-column"):
-                yield Label("Output & Diagnostic Console", classes="group-title")
-                yield RichLog(id="log", markup=True, wrap=True)
+                with Vertical(id="log-panel"):
+                    yield Label("Output & Diagnostic Console", classes="group-title")
+                    yield RichLog(id="log", markup=True, wrap=True)
 
         yield Footer()
 
