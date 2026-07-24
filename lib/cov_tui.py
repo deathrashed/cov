@@ -8,18 +8,32 @@ import subprocess
 from pathlib import Path
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.design import ColorSystem
-from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select
+from textual.screen import ModalScreen
+from textual.widgets import Button, DirectoryTree, Footer, Header, Input, Label, RichLog, Select
 
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "bin"
 
 
-# Built-in themes using Textual's design tokens
+# Built-in themes matching ~/.config/_riley/theme/riley.theme.json
 THEMES: dict[str, dict[str, str]] = {
+    "riley": {
+        "primary": "#B96CDB",
+        "secondary": "#C74DED",
+        "accent": "#00E8C6",
+        "background": "#1E1E1E",
+        "surface": "#222222",
+        "panel": "#2A2A2A",
+        "warning": "#F39C12",
+        "error": "#EE5D43",
+        "success": "#96E072",
+        "dark": True,
+    },
     "cobalt": {
         "primary": "#38bdf8",
         "secondary": "#818cf8",
@@ -56,31 +70,100 @@ THEMES: dict[str, dict[str, str]] = {
         "success": "#a6e22e",
         "dark": True,
     },
-    "emerald": {
-        "primary": "#10b981",
-        "secondary": "#06b6d4",
-        "accent": "#f59e0b",
-        "background": "#064e3b",
-        "surface": "#047857",
-        "panel": "#065f46",
-        "warning": "#f59e0b",
-        "error": "#ef4444",
-        "success": "#10b981",
-        "dark": True,
-    },
-    "dracula": {
-        "primary": "#bd93f9",
-        "secondary": "#8be9fd",
-        "accent": "#ff79c6",
-        "background": "#282a36",
-        "surface": "#44475a",
-        "panel": "#6272a4",
-        "warning": "#f1fa8c",
-        "error": "#ff5555",
-        "success": "#50fa7b",
-        "dark": True,
-    },
 }
+
+
+class PathFuzzyFinderModal(ModalScreen[str]):
+    """Fuzzy directory & audio file picker modal popup."""
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel Modal", key_display="esc"),
+    ]
+
+    CSS = """
+    PathFuzzyFinderModal {
+        background: black 65%;
+        align: center middle;
+    }
+
+    #fuzzy-picker-dialog {
+        background: $surface;
+        border: round $primary;
+        border-title-color: $accent;
+        border-title-style: bold;
+        width: 75%;
+        height: 75%;
+        padding: 1 2;
+    }
+
+    #fuzzy-title {
+        color: $primary;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+
+    #fuzzy-tree {
+        height: 1fr;
+        background: $background;
+        border: tall $primary 40%;
+        margin-bottom: 1;
+    }
+
+    #fuzzy-actions {
+        height: auto;
+    }
+
+    Button {
+        min-width: 12;
+        height: 1;
+        border: none;
+        margin-right: 1;
+    }
+
+    #fuzzy-select-btn {
+        background: $primary;
+        color: $background;
+        text-style: bold;
+    }
+
+    #fuzzy-cancel-btn {
+        background: $error;
+        color: #ffffff;
+    }
+    """
+
+    def __init__(self, initial_path: str = "~") -> None:
+        super().__init__()
+        resolved = Path(initial_path).expanduser().resolve()
+        self.root_path = resolved if resolved.exists() else Path.home()
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="fuzzy-picker-dialog"):
+            yield Label("Fuzzy Path Finder (Select Audio File or Album Directory)", id="fuzzy-title")
+            yield DirectoryTree(str(self.root_path), id="fuzzy-tree")
+            with Horizontal(id="fuzzy-actions"):
+                yield Button("Select Path", id="fuzzy-select-btn", variant="primary")
+                yield Button("Cancel", id="fuzzy-cancel-btn", variant="error")
+
+    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
+        event.stop()
+        self.dismiss(str(event.path))
+
+    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
+        event.stop()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "fuzzy-select-btn":
+            tree = self.query_one("#fuzzy-tree", DirectoryTree)
+            if tree.cursor_node and tree.cursor_node.data:
+                self.dismiss(str(tree.cursor_node.data.path))
+            else:
+                self.dismiss(str(self.root_path))
+        elif event.button.id == "fuzzy-cancel-btn":
+            self.dismiss("")
+
+    def action_cancel(self) -> None:
+        self.dismiss("")
 
 
 class CovCommandProvider(Provider):
@@ -100,6 +183,11 @@ class CovCommandProvider(Provider):
             "Run Doctor Diagnostics",
             app.run_doctor,
             help="Verify dependencies, binaries, and local path tools",
+        )
+        yield DiscoveryHit(
+            "Open Fuzzy Path Finder Modal",
+            app.action_open_fuzzy_finder,
+            help="Browse and select an audio file or album directory",
         )
         yield DiscoveryHit(
             "Show Live Log Output",
@@ -123,7 +211,7 @@ class CovCommandProvider(Provider):
         ]
         for name, value in sources:
             yield DiscoveryHit(
-                f"Source: {name}",
+                f"Source Target: {name}",
                 lambda val=value: app.set_source_target(val),
                 help=f"Set workflow source target to {name}",
             )
@@ -135,7 +223,7 @@ class CovCommandProvider(Provider):
         ]
         for name, value in modes:
             yield DiscoveryHit(
-                f"Mode: {name}",
+                f"Action Mode: {name}",
                 lambda val=value: app.set_action_mode(val),
                 help=f"Set artwork action mode to {name}",
             )
@@ -283,6 +371,15 @@ class CovToolkitApp(App[None]):
         background: $primary-lighten-1;
     }
 
+    #fuzzy-btn {
+        background: $panel;
+        color: $accent;
+    }
+
+    #fuzzy-btn:hover {
+        background: $panel-lighten-1;
+    }
+
     #show-log {
         background: $panel;
         color: $text;
@@ -311,30 +408,31 @@ class CovToolkitApp(App[None]):
 
     /* Centered Command Palette Popup Overlays */
     CommandPalette {
-        background: black 60%;
+        background: black 65%;
         align: center middle;
     }
 
     CommandPalette > Vertical {
         background: $surface;
         border: round $primary;
-        width: 60%;
-        height: 60%;
+        width: 65%;
+        height: 65%;
     }
     """
 
     BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("d", "doctor", "Doctor"),
-        ("l", "launch", "Launch"),
-        ("c", "clear_log", "Clear Log"),
-        ("t", "next_theme", "Theme"),
-        ("f,ctrl+p", "command_palette", "Palette"),
+        Binding("q", "quit", "Quit", show=True),
+        Binding("d", "doctor", "Doctor Diagnostics", show=True),
+        Binding("l", "launch", "Launch COV", show=True),
+        Binding("p", "open_fuzzy_finder", "Fuzzy Finder", show=True),
+        Binding("c", "clear_log", "Clear Log", show=True),
+        Binding("t", "next_theme", "Theme", show=True),
+        Binding("f,ctrl+p", "command_palette", "Command Palette", show=True),
     ]
 
     def __init__(self) -> None:
         super().__init__()
-        self.current_theme_name = "cobalt"
+        self.current_theme_name = "riley"
 
     def on_mount(self) -> None:
         self.apply_theme(self.current_theme_name)
@@ -363,6 +461,16 @@ class CovToolkitApp(App[None]):
         new_theme = theme_names[idx]
         self.apply_theme(new_theme)
         self.write(f"[bold $accent]Switched Theme:[/bold $accent] [italic]{new_theme.upper()}[/italic]")
+
+    def action_open_fuzzy_finder(self) -> None:
+        current_path = self.query_one("#path", Input).value.strip() or "~"
+        def on_path_selected(selected_path: str) -> None:
+            if selected_path:
+                self.query_one("#source", Select).value = "path"
+                self.query_one("#path", Input).value = selected_path
+                self.write(f"[bold $accent]Selected Path via Fuzzy Finder:[/bold $accent] [italic]{selected_path}[/italic]")
+
+        self.push_screen(PathFuzzyFinderModal(current_path), on_path_selected)
 
     def set_source_target(self, value: str) -> None:
         self.query_one("#source", Select).value = value
@@ -414,6 +522,7 @@ class CovToolkitApp(App[None]):
 
                 with Horizontal(id="actions-box"):
                     yield Button("Launch COV", id="launch", variant="primary")
+                    yield Button("Fuzzy Finder", id="fuzzy-btn")
                     yield Button("Show Log", id="show-log")
                     yield Button("Quit", id="quit", variant="error")
 
@@ -478,6 +587,8 @@ class CovToolkitApp(App[None]):
         match event.button.id:
             case "launch":
                 self.launch_cov()
+            case "fuzzy-btn":
+                self.action_open_fuzzy_finder()
             case "show-log":
                 self.show_log()
             case "quit":
