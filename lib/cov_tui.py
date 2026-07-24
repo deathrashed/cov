@@ -312,6 +312,7 @@ class CovToolkitApp(App[None]):
     /* Centered Command Palette Popup Overlays */
     CommandPalette {
         background: black 60%;
+        align: center middle;
     }
 
     CommandPalette > Vertical {
@@ -319,8 +320,6 @@ class CovToolkitApp(App[None]):
         border: round $primary;
         width: 60%;
         height: 60%;
-        align: center middle;
-        margin: auto;
     }
     """
 
