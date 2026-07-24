@@ -7,12 +7,78 @@ import subprocess
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select, Static
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.design import ColorSystem
+from textual.widgets import Button, Footer, Header, Input, Label, RichLog, Select
 
 
 ROOT = Path(__file__).resolve().parent.parent
 BIN = ROOT / "bin"
+
+
+# Built-in themes using Textual's design tokens
+THEMES: dict[str, dict[str, str]] = {
+    "nord": {
+        "primary": "#88c0d0",
+        "secondary": "#81a1c1",
+        "accent": "#b48ead",
+        "background": "#2e3440",
+        "surface": "#3b4252",
+        "panel": "#434c5e",
+        "warning": "#ebcb8b",
+        "error": "#bf616a",
+        "success": "#a3be8c",
+        "dark": True,
+    },
+    "monokai": {
+        "primary": "#f92672",
+        "secondary": "#66d9ef",
+        "accent": "#ae81ff",
+        "background": "#272822",
+        "surface": "#3e3d32",
+        "panel": "#49483e",
+        "warning": "#fd971f",
+        "error": "#f92672",
+        "success": "#a6e22e",
+        "dark": True,
+    },
+    "cobalt": {
+        "primary": "#38bdf8",
+        "secondary": "#818cf8",
+        "accent": "#f472b6",
+        "background": "#0f172a",
+        "surface": "#1e293b",
+        "panel": "#334155",
+        "warning": "#fbbf24",
+        "error": "#f43f5e",
+        "success": "#34d399",
+        "dark": True,
+    },
+    "emerald": {
+        "primary": "#10b981",
+        "secondary": "#06b6d4",
+        "accent": "#f59e0b",
+        "background": "#064e3b",
+        "surface": "#047857",
+        "panel": "#065f46",
+        "warning": "#f59e0b",
+        "error": "#ef4444",
+        "success": "#10b981",
+        "dark": True,
+    },
+    "dracula": {
+        "primary": "#bd93f9",
+        "secondary": "#8be9fd",
+        "accent": "#ff79c6",
+        "background": "#282a36",
+        "surface": "#44475a",
+        "panel": "#6272a4",
+        "warning": "#f1fa8c",
+        "error": "#ff5555",
+        "success": "#50fa7b",
+        "dark": True,
+    },
+}
 
 
 class CovToolkitApp(App[None]):
@@ -21,155 +87,150 @@ class CovToolkitApp(App[None]):
 
     CSS = """
     Screen {
-        background: #0f172a;
-        color: #f8fafc;
+        background: $background;
+        color: $text;
         layout: vertical;
     }
 
     Header {
-        background: #1e293b;
-        color: #38bdf8;
+        background: $surface;
+        color: $primary;
         dock: top;
     }
 
     Footer {
-        background: #1e293b;
-        color: #94a3b8;
+        background: $surface;
+        color: $text-muted;
     }
 
-    #main-container {
-        padding: 1 2;
+    #main-grid {
         height: 1fr;
+        padding: 0 1;
     }
 
-    #header-box {
-        background: #1e293b;
-        border: round #38bdf8;
-        padding: 1 2;
-        margin-bottom: 1;
-        height: auto;
-    }
-
-    #header-title {
-        color: #38bdf8;
-        text-style: bold;
-    }
-
-    #header-desc {
-        color: #94a3b8;
-        margin-top: 0;
-    }
-
-    #content-grid {
-        height: 1fr;
-    }
-
-    #form-panel {
-        width: 55%;
+    #form-column {
+        width: 1fr;
         height: 100%;
-        background: #1e293b;
-        border: round #334155;
-        padding: 1 2;
+        background: $surface;
+        border: round $primary 50%;
+        border-title-color: $primary;
+        border-title-style: bold;
+        padding: 0 1;
         margin-right: 1;
     }
 
-    #log-panel {
-        width: 45%;
+    #log-column {
+        width: 1fr;
         height: 100%;
-        background: #1e293b;
-        border: round #334155;
-        padding: 1;
+        background: $surface;
+        border: round $primary 50%;
+        border-title-color: $accent;
+        border-title-style: bold;
+        padding: 0 1;
     }
 
-    .section-title {
-        color: #38bdf8;
-        text-style: bold;
+    .group-box {
+        background: $panel 40%;
+        border: round $primary 30%;
+        padding: 0 1;
         margin-top: 1;
+        margin-bottom: 1;
+        height: auto;
+    }
+
+    .group-title {
+        color: $primary;
+        text-style: bold;
+        margin-top: 0;
         margin-bottom: 0;
-        border-bottom: solid #334155;
     }
 
     .field-label {
-        color: #cbd5e1;
-        margin-top: 1;
+        color: $text;
+        margin-top: 0;
+        margin-bottom: 0;
+        text-style: bold;
     }
 
     Input {
-        background: #0f172a;
-        border: tall #475569;
-        color: #f8fafc;
-        margin-bottom: 0;
+        background: $background;
+        border: tall $primary 40%;
+        color: $text;
+        height: 3;
+        padding: 0 1;
+        margin-bottom: 1;
     }
 
     Input:focus {
-        border: tall #38bdf8;
+        border: tall $accent;
     }
 
     Select {
-        background: #0f172a;
-        border: tall #475569;
-        margin-bottom: 0;
+        background: $background;
+        border: tall $primary 40%;
+        height: 3;
+        margin-bottom: 1;
     }
 
     Select:focus {
-        border: tall #38bdf8;
+        border: tall $accent;
     }
 
-    #actions-row {
+    #actions-box {
         height: auto;
-        margin-top: 1;
-        margin-bottom: 1;
+        padding: 1 0 0 0;
     }
 
     Button {
         margin-right: 1;
-        border: none;
-        min-width: 14;
+        min-width: 12;
         height: 3;
+        border: none;
     }
 
     #launch {
-        background: #0284c7;
-        color: #ffffff;
+        background: $primary;
+        color: $background;
         text-style: bold;
     }
 
     #launch:hover {
-        background: #0369a1;
+        background: $primary-lighten-1;
     }
 
     #doctor {
-        background: #334155;
-        color: #f8fafc;
+        background: $panel;
+        color: $text;
     }
 
     #doctor:hover {
-        background: #475569;
+        background: $panel-lighten-1;
     }
 
     #show-log {
-        background: #334155;
-        color: #f8fafc;
+        background: $panel;
+        color: $text;
     }
 
     #show-log:hover {
-        background: #475569;
+        background: $panel-lighten-1;
     }
 
     #quit {
-        background: #be123c;
+        background: $error;
         color: #ffffff;
     }
 
     #quit:hover {
-        background: #9f1239;
+        background: $error-darken-1;
     }
 
     #log {
-        background: #0f172a;
+        background: $background;
         border: none;
-        height: 100%;
-        color: #e2e8f0;
+        height: 1fr;
+        color: $text;
+        padding: 1;
     }
     """
 
@@ -177,27 +238,52 @@ class CovToolkitApp(App[None]):
         ("q", "quit", "Quit"),
         ("d", "doctor", "Doctor"),
         ("l", "launch", "Launch"),
-        ("c", "clear_log", "Clear Console"),
+        ("c", "clear_log", "Clear Log"),
+        ("t", "next_theme", "Switch Theme"),
     ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.current_theme_name = "cobalt"
+
+    def on_mount(self) -> None:
+        self.apply_theme(self.current_theme_name)
+
+    def apply_theme(self, theme_name: str) -> None:
+        if theme_name in THEMES:
+            t = THEMES[theme_name]
+            color_sys = ColorSystem(
+                primary=t["primary"],
+                secondary=t.get("secondary"),
+                accent=t.get("accent"),
+                background=t.get("background"),
+                surface=t.get("surface"),
+                panel=t.get("panel"),
+                warning=t.get("warning"),
+                error=t.get("error"),
+                success=t.get("success"),
+                dark=t.get("dark", True),
+            )
+            self.design = color_sys
+            self.current_theme_name = theme_name
+
+    def action_next_theme(self) -> None:
+        theme_names = list(THEMES.keys())
+        idx = (theme_names.index(self.current_theme_name) + 1) % len(theme_names)
+        new_theme = theme_names[idx]
+        self.apply_theme(new_theme)
+        self.write(f"[bold $accent]Switched Theme:[/bold $accent] [italic]{new_theme.upper()}[/italic]")
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Container(id="main-container"):
-            with Container(id="header-box"):
-                yield Label("COV INTEGRATION TOOLKIT", id="header-title")
-                yield Label(
-                    "Automatic metadata-aware cover search & high-res artwork tag embedder",
-                    id="header-desc",
-                )
-
-            with Horizontal(id="content-grid"):
-                with VerticalScroll(id="form-panel"):
-                    yield Label("1. Workflow Target", classes="section-title")
-                    yield Label("Source Provider", classes="field-label")
+        with Horizontal(id="main-grid"):
+            with VerticalScroll(id="form-column"):
+                with Vertical(classes="group-box"):
+                    yield Label("Workflow Source Target", classes="group-title")
                     yield Select(
                         [
                             ("Automatic Context (Swinsian/Finder/Clipboard)", "context"),
-                            ("Direct Path (Audio file or Album directory)", "path"),
+                            ("Direct Path (Audio file or Album folder)", "path"),
                             ("Swinsian Selection / Playing Track", "swinsian"),
                             ("Finder Selection", "finder"),
                             ("Browse Folder (Native Chooser)...", "choose"),
@@ -206,10 +292,11 @@ class CovToolkitApp(App[None]):
                         value="context",
                         id="source",
                     )
-                    yield Label("Target Path (Direct Path only)", classes="field-label")
+                    yield Label("Target Audio/Directory Path", classes="field-label")
                     yield Input(placeholder="/Volumes/Audio/Artist/Album", id="path")
 
-                    yield Label("2. Action Mode", classes="section-title")
+                with Vertical(classes="group-box"):
+                    yield Label("Action & Output Mode", classes="group-title")
                     yield Select(
                         [
                             ("Save Sidecar Cover Beside Album", "save"),
@@ -219,22 +306,37 @@ class CovToolkitApp(App[None]):
                         id="mode",
                     )
 
-                    yield Label("3. Optional Search Overrides", classes="section-title")
+                with Vertical(classes="group-box"):
+                    yield Label("Optional Search Overrides", classes="group-title")
                     yield Input(placeholder="Artist Name", id="artist")
-                    yield Input(placeholder="Album Name", id="album")
+                    yield Input(placeholder="Album Title", id="album")
                     yield Input(placeholder="Barcode / Catalogue Number", id="identifier")
                     yield Input(placeholder="Preferred Resolution (e.g. 1500)", id="resolution")
                     yield Input(placeholder="COV Source IDs (comma-separated)", id="sources")
 
-                    with Horizontal(id="actions-row"):
-                        yield Button("Launch COV", id="launch", variant="primary")
-                        yield Button("Run Doctor", id="doctor")
-                        yield Button("Show Log", id="show-log")
-                        yield Button("Quit", id="quit", variant="error")
+                with Vertical(classes="group-box"):
+                    yield Label("UI Color Theme", classes="group-title")
+                    yield Select(
+                        [
+                            ("Cobalt (Default Dark Slate/Cyan)", "cobalt"),
+                            ("Nord (Muted Arctic Blue)", "nord"),
+                            ("Monokai (Vibrant Pink/Green)", "monokai"),
+                            ("Emerald (Deep Ocean Green)", "emerald"),
+                            ("Dracula (Purple/Pink Gothic)", "dracula"),
+                        ],
+                        value="cobalt",
+                        id="theme-select",
+                    )
 
-                with Vertical(id="log-panel"):
-                    yield Label("Output & Execution Log", classes="section-title")
-                    yield RichLog(id="log", markup=True, wrap=True)
+                with Horizontal(id="actions-box"):
+                    yield Button("Launch COV", id="launch", variant="primary")
+                    yield Button("Doctor", id="doctor")
+                    yield Button("Show Log", id="show-log")
+                    yield Button("Quit", id="quit", variant="error")
+
+            with Vertical(id="log-column"):
+                yield Label("Output & Diagnostic Console", classes="group-title")
+                yield RichLog(id="log", markup=True, wrap=True)
 
         yield Footer()
 
@@ -250,7 +352,7 @@ class CovToolkitApp(App[None]):
         if source == "path":
             path = self.query_one("#path", Input).value.strip()
             if not path:
-                raise ValueError("Please provide an audio file or album directory path.")
+                raise ValueError("Please enter an audio file or album directory path.")
             command = [str(BIN / ("cov-open-embed" if mode == "embed" else "cov-open")), path]
         else:
             command = [str(BIN / f"cov-{source}"), mode]
@@ -272,22 +374,26 @@ class CovToolkitApp(App[None]):
         try:
             command = self.command()
         except ValueError as error:
-            self.write(f"[bold red]Error:[/bold red] {error}")
+            self.write(f"[bold $error]Error:[/bold $error] {error}")
             return
-        self.write(f"[bold #38bdf8]Executing:[/bold #38bdf8] [dim]{' '.join(command)}[/dim]")
+        self.write(f"[bold $primary]Executing:[/bold $primary] [dim]{' '.join(command)}[/dim]")
         completed = subprocess.run(command, capture_output=True, text=True, check=False)
         output = (completed.stdout + completed.stderr).strip()
-        self.write(output or f"[green]Command executed cleanly (status code {completed.returncode}).[/green]")
+        self.write(output or f"[bold $success]Command executed cleanly (status code {completed.returncode}).[/bold $success]")
 
     def run_doctor(self) -> None:
-        self.write("[bold #38bdf8]Running Environment Doctor...[/bold #38bdf8]")
+        self.write("[bold $primary]Running Environment Doctor...[/bold $primary]")
         completed = subprocess.run([str(BIN / "cov-doctor")], capture_output=True, text=True, check=False)
         self.write(completed.stdout.strip())
 
     def show_log(self) -> None:
-        self.write("[bold #38bdf8]Fetching Live Integration Logs...[/bold #38bdf8]")
+        self.write("[bold $primary]Fetching Live Integration Logs...[/bold $primary]")
         completed = subprocess.run([str(BIN / "cov-log")], capture_output=True, text=True, check=False)
         self.write(completed.stdout.strip())
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "theme-select" and event.value != Select.BLANK:
+            self.apply_theme(str(event.value))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         match event.button.id:
