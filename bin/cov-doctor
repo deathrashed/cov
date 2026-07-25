@@ -30,7 +30,7 @@ else
   failed=1
 fi
 
-for command_name in cov-open cov-open-embed cov-embed cov-finder cov-choose cov-swinsian cov-clipboard cov-context cov-tui cov-ghostty cov-log; do
+for command_name in cov-open cov-open-embed cov-embed cov-finder cov-choose cov-swinsian cov-clipboard cov-context cov-tui cov-search cov-ghostty cov-log; do
   command_path="${REPO_DIR}/bin/$command_name"
   check_executable "$command_name" "$command_path"
 done

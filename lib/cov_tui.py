@@ -12,7 +12,9 @@ from textual.binding import Binding
 from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.design import ColorSystem
-from textual.widgets import Button, DirectoryTree, Footer, Header, Input, Label, RichLog, Select
+from textual.widgets import Button, Footer, Header, Input, Label, OptionList, RichLog, Select
+
+from lib.cov_search import fuzzy_match_items, get_search_directories, scan_audio_items
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -84,6 +86,11 @@ class CovCommandProvider(Provider):
             "Launch COV Search",
             app.launch_cov,
             help="Start COVIT process and launch browser cover search",
+        )
+        yield DiscoveryHit(
+            "Launch Interactive fzf Terminal Search",
+            app.action_launch_fzf_cli,
+            help="Open full terminal fzf search over audio library",
         )
         yield DiscoveryHit(
             "Run Doctor Diagnostics",
@@ -261,11 +268,16 @@ class CovToolkitApp(App[None]):
         margin-bottom: 1;
     }
 
-    #inline-fuzzy-tree {
+    #fuzzy-results-list {
         height: 1fr;
         background: $background;
         border: tall $primary 40%;
         margin-bottom: 1;
+
+    }
+
+    #fuzzy-results-list:focus {
+        border: tall $accent;
     }
 
     #actions-box {
@@ -289,6 +301,16 @@ class CovToolkitApp(App[None]):
 
     #launch:hover {
         background: $primary-lighten-1;
+    }
+
+    #fzf-cli-btn {
+        background: $accent;
+        color: $background;
+        text-style: bold;
+    }
+
+    #fzf-cli-btn:hover {
+        background: $accent-lighten-1;
     }
 
     #show-log {
@@ -335,6 +357,7 @@ class CovToolkitApp(App[None]):
         Binding("q", "quit", "Quit", show=True),
         Binding("d", "doctor", "Doctor Diagnostics", show=True),
         Binding("l", "launch", "Launch COV", show=True),
+        Binding("f,p", "launch_fzf_cli", "fzf CLI Search", show=True),
         Binding("c", "clear_log", "Clear Log", show=True),
         Binding("t", "next_theme", "Theme", show=True),
         Binding("ctrl+p", "command_palette", "Command Palette", show=True),
@@ -343,9 +366,14 @@ class CovToolkitApp(App[None]):
     def __init__(self) -> None:
         super().__init__()
         self.current_theme_name = "riley"
+        self.cached_audio_items: list[str] = []
 
     def on_mount(self) -> None:
         self.apply_theme(self.current_theme_name)
+        search_dirs = get_search_directories()
+        if search_dirs:
+            self.cached_audio_items = scan_audio_items(search_dirs[0])
+            self.update_fuzzy_options("")
 
     def apply_theme(self, theme_name: str) -> None:
         if theme_name in THEMES:
@@ -414,9 +442,12 @@ class CovToolkitApp(App[None]):
                         yield Button("Quit", id="quit", variant="error")
 
                 with Vertical(classes="card-panel"):
-                    yield Label("3. Fuzzy Path Finder & Target Path", classes="field-label")
-                    yield Input(placeholder="Type path or filter directory...", value=str(Path.home()), id="inline-fuzzy-input")
-                    yield DirectoryTree(str(Path.home()), id="inline-fuzzy-tree")
+                    yield Label("3. Live Fuzzy Path & Library Search", classes="field-label")
+                    yield Input(placeholder="Type artist, album, track, or path to fuzzy search...", id="inline-fuzzy-input")
+                    yield OptionList(id="fuzzy-results-list")
+                    with Horizontal(id="actions-box"):
+                        yield Button("fzf CLI Search", id="fzf-cli-btn", variant="primary")
+                        yield Button("Clear Search", id="clear-search-btn")
 
             # Right Column: Card 3 (Optional Search Overrides) + Card 4 (Output & Diagnostic Console)
             with Vertical(id="right-column"):
@@ -434,28 +465,31 @@ class CovToolkitApp(App[None]):
 
         yield Footer()
 
+    def update_fuzzy_options(self, query: str) -> None:
+        opt_list = self.query_one("#fuzzy-results-list", OptionList)
+        opt_list.clear_options()
+        matches = fuzzy_match_items(query, self.cached_audio_items, limit=50)
+        if matches:
+            opt_list.add_options(matches)
+        else:
+            opt_list.add_options(["(No matching audio files or folders found)"])
+
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "inline-fuzzy-input":
-            val = event.value.strip()
-            if val:
-                p = Path(val).expanduser().resolve()
-                if p.exists() and p.is_dir():
-                    tree = self.query_one("#inline-fuzzy-tree", DirectoryTree)
-                    tree.path = p
+            self.update_fuzzy_options(event.value)
 
-    def on_directory_tree_file_selected(self, event: DirectoryTree.FileSelected) -> None:
-        event.stop()
-        selected = str(event.path)
-        self.query_one("#source", Select).value = "path"
-        self.query_one("#inline-fuzzy-input", Input).value = selected
-        self.write(f"[bold $accent]Selected File via Fuzzy Finder:[/bold $accent] [italic]{selected}[/italic]")
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        selected_text = str(event.option.prompt)
+        if selected_text and not selected_text.startswith("("):
+            self.query_one("#source", Select).value = "path"
+            self.query_one("#inline-fuzzy-input", Input).value = selected_text
+            self.write(f"[bold $accent]Selected Path via Live Fuzzy Finder:[/bold $accent] [italic]{selected_text}[/italic]")
 
-    def on_directory_tree_directory_selected(self, event: DirectoryTree.DirectorySelected) -> None:
-        event.stop()
-        selected = str(event.path)
-        self.query_one("#source", Select).value = "path"
-        self.query_one("#inline-fuzzy-input", Input).value = selected
-        self.write(f"[bold $accent]Selected Directory via Fuzzy Finder:[/bold $accent] [italic]{selected}[/italic]")
+    def action_launch_fzf_cli(self) -> None:
+        fzf_script = BIN / "cov-search"
+        self.write(f"[bold $accent]Launching interactive terminal fzf search ({fzf_script})...[/bold $accent]")
+        with self.suspend():
+            subprocess.run([str(fzf_script)])
 
     def write(self, message: str) -> None:
         self.query_one("#log", RichLog).write(message)
@@ -524,6 +558,11 @@ class CovToolkitApp(App[None]):
         match event.button.id:
             case "launch":
                 self.launch_cov()
+            case "fzf-cli-btn":
+                self.action_launch_fzf_cli()
+            case "clear-search-btn":
+                self.query_one("#inline-fuzzy-input", Input).value = ""
+                self.update_fuzzy_options("")
             case "show-log":
                 self.show_log()
             case "quit":
