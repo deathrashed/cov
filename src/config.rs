@@ -63,11 +63,22 @@ impl Config {
         }
         Ok(Config::default())
     }
+
+    pub fn save(&self) -> Result<()> {
+        let path = Self::config_path().unwrap_or_else(|| PathBuf::from(".cov.toml"));
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let content = toml::to_string_pretty(self)?;
+        fs::write(&path, content)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     #[test]
     fn test_default_values() {
@@ -110,7 +121,21 @@ mod tests {
         let deserialized: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(deserialized.theme, "dracula");
         assert_eq!(deserialized.default_mode, Mode::Embed);
-        assert_eq!(deserialized.library_root, None); // default
-        assert_eq!(deserialized.covit_path, expand_tilde("~/.local/bin/covit")); // default
+        assert_eq!(deserialized.library_root, None);
+        assert_eq!(deserialized.covit_path, expand_tilde("~/.local/bin/covit"));
+    }
+
+    #[test]
+    fn test_config_save_roundtrip() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("config.toml");
+        let mut cfg = Config::default();
+        cfg.library_root = Some(PathBuf::from("/music/library"));
+
+        let content = toml::to_string_pretty(&cfg).unwrap();
+        fs::write(&path, content).unwrap();
+
+        let loaded = Config::load_with_override(Some(&path)).unwrap();
+        assert_eq!(loaded.library_root, Some(PathBuf::from("/music/library")));
     }
 }

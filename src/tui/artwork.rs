@@ -1,5 +1,8 @@
+use crossbeam::channel::Sender;
 use lofty::file::TaggedFileExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Badge glyphs for the album list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,6 +170,62 @@ impl Filter {
             }
         }
     }
+}
+
+/// A background artwork-inspection job for a single album.
+pub struct InspectJob {
+    pub epoch: u64,
+    pub dir: PathBuf,
+    pub tracks: Vec<PathBuf>,
+}
+
+/// Result of inspecting one album's artwork state, tagged with the scan
+/// epoch it was produced for so stale results can be discarded.
+pub struct ArtworkMsg {
+    pub epoch: u64,
+    pub dir: PathBuf,
+    pub status: ArtworkStatus,
+}
+
+/// Spawn a fixed pool of worker threads that consume `InspectJob`s and report
+/// `ArtworkMsg` results back over `result_tx`. Returns the sender used to
+/// submit jobs.
+///
+/// Each worker checks `cancel` before doing any work: if the job's epoch no
+/// longer matches the live epoch (i.e. a rescan happened), the job is
+/// dropped instead of wasting time inspecting stale tracks.
+pub fn spawn_inspector_pool(
+    cancel: Arc<AtomicU64>,
+    result_tx: Sender<ArtworkMsg>,
+    workers: usize,
+) -> Sender<InspectJob> {
+    let (job_tx, job_rx) = crossbeam::channel::unbounded::<InspectJob>();
+
+    for _ in 0..workers.max(1) {
+        let job_rx = job_rx.clone();
+        let result_tx = result_tx.clone();
+        let cancel = cancel.clone();
+        std::thread::spawn(move || {
+            while let Ok(job) = job_rx.recv() {
+                if cancel.load(Ordering::Relaxed) != job.epoch {
+                    continue; // stale: a rescan happened, drop this job
+                }
+                let (status, _preview) = inspect_album(&job.dir, &job.tracks);
+                if result_tx
+                    .send(ArtworkMsg {
+                        epoch: job.epoch,
+                        dir: job.dir,
+                        status,
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+            }
+        });
+    }
+
+    job_tx
 }
 
 #[cfg(test)]

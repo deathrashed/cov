@@ -1,2 +1,6 @@
-// Screen rendering is done inline in app.rs for v1.
-// Move to dedicated files when a screen becomes complex enough.
+pub mod doctor;
+pub mod finder;
+pub mod firstrun;
+pub mod form;
+pub mod help;
+pub mod log;

@@ -1,0 +1,29 @@
+#!/bin/zsh
+set -eu
+
+MUSIC_DIR="${1:-${COV_LIBRARY_ROOT:-${MUSIC_DIR:-}}}"
+
+if [[ -z "$MUSIC_DIR" || ! -d "$MUSIC_DIR" ]]; then
+    CONFIG_FILE="${HOME}/.config/cov/config.toml"
+    if [[ -f "$CONFIG_FILE" ]]; then
+        MUSIC_DIR=$(grep 'library_root' "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' "' || true)
+    fi
+fi
+
+if [[ -z "$MUSIC_DIR" || ! -d "$MUSIC_DIR" ]]; then
+    echo "ERROR: Music directory not found. Set MUSIC_DIR or configure library_root in ~/.config/cov/config.toml"
+    exit 1
+fi
+
+SCRIPT_DIR=${0:A:h}
+COV_BIN="$SCRIPT_DIR/cov"
+
+env FZF_DEFAULT_OPTS= fd -t d . "$MUSIC_DIR" 2>/dev/null | fzf \
+  --prompt=" COV ❯ " \
+  --header="Enter: Open COV | Ctrl+E: Open & Embed | Ctrl+O: Finder | Ctrl+Y: Copy Path" \
+  --preview='eza --tree --color=always {} 2>/dev/null | head -200 || ls -la {}' \
+  --preview-window='right:40%:wrap' \
+  --bind="enter:execute($COV_BIN open {})+abort" \
+  --bind="ctrl-e:execute($COV_BIN open --embed {})+abort" \
+  --bind="ctrl-o:execute(open -R {})+abort" \
+  --bind="ctrl-y:execute(echo -n {} | pbcopy)+abort"
