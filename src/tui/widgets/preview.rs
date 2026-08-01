@@ -1,10 +1,10 @@
 use crate::tui::app::App;
 use crate::tui::images;
 use ratatui::{
+    Frame,
     layout::Rect,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 
 pub fn draw(app: &App, f: &mut Frame, area: Rect) {
@@ -51,10 +51,7 @@ pub fn draw(app: &App, f: &mut Frame, area: Rect) {
             ]),
         ];
 
-        f.render_widget(
-            Paragraph::new(lines).wrap(Wrap { trim: false }),
-            inner,
-        );
+        f.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
     } else {
         let placeholder = " Select an album from the list\n to preview artwork metadata.";
         f.render_widget(

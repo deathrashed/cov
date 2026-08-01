@@ -1,16 +1,16 @@
 use crate::tui::app::App;
 use crate::tui::artwork::{Badge, Filter};
 use ratatui::{
+    Frame,
     layout::Rect,
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 pub fn draw(app: &App, f: &mut Frame, area: Rect) {
     let filter_label = match app.filter {
         Filter::All => "All".to_string(),
-        Filter::Missing => "Missing Only".to_string(),
+        Filter::Missing => "Needs Cover".to_string(),
         Filter::NeedsEmbed => "Needs Embed".to_string(),
     };
 
@@ -67,14 +67,14 @@ pub fn draw(app: &App, f: &mut Frame, area: Rect) {
             .get(&album.dir)
             .map(|s| s.badge())
             .unwrap_or(Badge::Checking);
-        let badge_style = app.theme.badge_style(badge);
+        let badge_style = app.theme.badge_style(badge).patch(style);
         let spans = vec![
             Span::styled(badge.glyph().to_string(), badge_style),
             Span::raw(" "),
             Span::styled(&album.display, style),
         ];
         f.render_widget(
-            Paragraph::new(Line::from(spans)),
+            Paragraph::new(Line::from(spans)).style(style),
             Rect::new(list_inner.x, y, list_inner.width, 1),
         );
     }

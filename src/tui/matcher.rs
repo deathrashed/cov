@@ -91,6 +91,10 @@ mod tests {
             make_album("Album C"),
         ]);
         matcher.query("");
-        assert_eq!(matcher.results().len(), 3, "replace_items must clear previous nucleo entries");
+        assert_eq!(
+            matcher.results().len(),
+            3,
+            "replace_items must clear previous nucleo entries"
+        );
     }
 }

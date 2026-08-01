@@ -1,5 +1,8 @@
 use crate::paths;
 use anyhow::{Context, Result, bail};
+use id3::TagLike;
+use lofty::file::TaggedFileExt;
+use lofty::tag::Accessor;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -65,11 +68,12 @@ pub fn build_covit_argv(audio_path: &Path, opts: &LaunchOptions) -> Vec<String> 
         argv.push(build_embed_command(album_dir));
     }
 
-    if let Some(ref artist) = opts.artist {
+    let (tag_artist, tag_album) = query_tags(audio_path);
+    if let Some(artist) = opts.artist.as_ref().or(tag_artist.as_ref()) {
         argv.push("--query-artist".to_string());
         argv.push(artist.clone());
     }
-    if let Some(ref album) = opts.album {
+    if let Some(album) = opts.album.as_ref().or(tag_album.as_ref()) {
         argv.push("--query-album".to_string());
         argv.push(album.clone());
     }
@@ -91,6 +95,34 @@ pub fn build_covit_argv(audio_path: &Path, opts: &LaunchOptions) -> Vec<String> 
     }
 
     argv
+}
+
+fn query_tags(audio_path: &Path) -> (Option<String>, Option<String>) {
+    if audio_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mp3"))
+        && let Ok(tag) = id3::Tag::read_from_path(audio_path)
+    {
+        return (
+            tag.artist().map(str::to_owned),
+            tag.album().map(str::to_owned),
+        );
+    }
+    let tagged_file = match lofty::probe::Probe::open(audio_path).and_then(|probe| probe.read()) {
+        Ok(tagged_file) => tagged_file,
+        Err(_) => return (None, None),
+    };
+    let Some(tag) = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag())
+    else {
+        return (None, None);
+    };
+    (
+        tag.artist().map(|value| value.into_owned()),
+        tag.album().map(|value| value.into_owned()),
+    )
 }
 
 pub fn build_background_script(argv: &[String], log_path: &Path) -> (String, String) {
@@ -178,4 +210,49 @@ pub fn launch(opts: &LaunchOptions) -> Result<(PathBuf, Vec<String>)> {
     }
 
     Ok((audio_path, argv))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use id3::TagLike;
+    use tempfile::tempdir;
+
+    fn option_value<'a>(argv: &'a [String], option: &str) -> Option<&'a str> {
+        argv.iter()
+            .position(|value| value == option)
+            .and_then(|index| argv.get(index + 1))
+            .map(String::as_str)
+    }
+
+    #[test]
+    fn build_covit_argv_uses_complete_audio_tags_as_queries() {
+        let temp = tempdir().unwrap();
+        let audio_path = temp.path().join("01-hell-awaits.mp3");
+        std::fs::File::create(&audio_path).unwrap();
+        let mut tag = id3::Tag::new();
+        tag.set_artist("Slayer");
+        tag.set_album("Hell Awaits");
+        tag.write_to_path(&audio_path, id3::Version::Id3v24)
+            .unwrap();
+        let options = LaunchOptions {
+            path: audio_path.to_string_lossy().to_string(),
+            embed: false,
+            output: "cover".to_string(),
+            covit: PathBuf::from("/usr/bin/covit"),
+            log: temp.path().join("cov.log"),
+            artist: None,
+            album: None,
+            identifier: None,
+            country: None,
+            resolution: None,
+            sources: None,
+            foreground: false,
+        };
+
+        let argv = build_covit_argv(&audio_path, &options);
+
+        assert_eq!(option_value(&argv, "--query-artist"), Some("Slayer"));
+        assert_eq!(option_value(&argv, "--query-album"), Some("Hell Awaits"));
+    }
 }

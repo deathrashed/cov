@@ -1,7 +1,7 @@
 use crate::tui::app::App;
 use ratatui::{
-    widgets::{Block, Borders, Paragraph},
     Frame,
+    widgets::{Block, Borders, Paragraph},
 };
 
 pub fn draw(app: &App, f: &mut Frame) {

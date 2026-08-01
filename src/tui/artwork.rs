@@ -165,9 +165,7 @@ impl Filter {
         match self {
             Filter::All => true,
             Filter::Missing => badge == Badge::Missing,
-            Filter::NeedsEmbed => {
-                badge == Badge::SidecarOnly || badge == Badge::Partial || badge == Badge::Missing
-            }
+            Filter::NeedsEmbed => badge == Badge::SidecarOnly || badge == Badge::Partial,
         }
     }
 }
@@ -276,6 +274,7 @@ mod tests {
         assert!(!Filter::Missing.allows(Badge::Complete));
         assert!(Filter::Missing.allows(Badge::Missing));
         assert!(!Filter::NeedsEmbed.allows(Badge::Complete));
+        assert!(!Filter::NeedsEmbed.allows(Badge::Missing));
         assert!(Filter::NeedsEmbed.allows(Badge::SidecarOnly));
         assert!(Filter::NeedsEmbed.allows(Badge::Partial));
     }

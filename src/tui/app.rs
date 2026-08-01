@@ -1,6 +1,6 @@
-use crate::config::Config;
+use crate::config::CacheRefresh;
+use crate::config::{Config, Mode};
 use crate::launcher::{self, LaunchOptions};
-use crate::macos;
 use crate::tui::artwork::{self, ArtworkMsg, ArtworkStatus, Badge, Filter, InspectJob};
 use crate::tui::cache;
 use crate::tui::matcher::AlbumMatcher;
@@ -9,40 +9,87 @@ use crate::tui::screens;
 use crate::tui::theme::Theme;
 use crossbeam::channel::{self, Receiver, Sender};
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     crossterm::{
         event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
         execute,
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    Terminal,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Screen states for the TUI state machine.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Screen {
     FirstRun,
     Finder,
-    Form(FormState),
-    Log,
-    Doctor,
+    Settings(SettingsState),
     Help,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct FormState {
-    pub embed_mode: bool,
-    pub artist: String,
-    pub album: String,
-    pub identifier: String,
-    pub country: String,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettingsField {
+    Library,
+    DefaultAction,
+    OutputName,
+    Resolution,
+    Providers,
+}
+
+impl SettingsField {
+    fn next(self) -> Self {
+        match self {
+            Self::Library => Self::DefaultAction,
+            Self::DefaultAction => Self::OutputName,
+            Self::OutputName => Self::Resolution,
+            Self::Resolution => Self::Providers,
+            Self::Providers => Self::Library,
+        }
+    }
+
+    fn previous(self) -> Self {
+        match self {
+            Self::Library => Self::Providers,
+            Self::DefaultAction => Self::Library,
+            Self::OutputName => Self::DefaultAction,
+            Self::Resolution => Self::OutputName,
+            Self::Providers => Self::Resolution,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SettingsState {
+    pub library_root: String,
+    pub default_mode: Mode,
+    pub output_basename: String,
     pub resolution: String,
     pub sources: String,
-    pub focus: usize, // 0..6
+    pub focus: SettingsField,
+}
+
+impl SettingsState {
+    fn from_config(config: &Config) -> Self {
+        Self {
+            library_root: config
+                .library_root
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            default_mode: config.default_mode,
+            output_basename: config.output_basename.clone(),
+            resolution: config
+                .default_resolution
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+            sources: config.default_sources.clone().unwrap_or_default(),
+            focus: SettingsField::Library,
+        }
+    }
 }
 
 /// Actions produced by the reducer for the event loop to execute.
@@ -51,16 +98,7 @@ pub enum Action {
     None,
     Quit,
     Rescan,
-    Launch {
-        album_dir: PathBuf,
-        embed: bool,
-        artist: Option<String>,
-        album: Option<String>,
-        identifier: Option<String>,
-        country: Option<String>,
-        resolution: Option<String>,
-        sources: Option<String>,
-    },
+    Launch { album_dir: PathBuf, embed: bool },
 }
 
 /// The main TUI application state machine.
@@ -79,6 +117,7 @@ pub struct App {
     pub scan_epoch: Arc<AtomicU64>,
     pub status_line: String,
     pub is_scanning: bool,
+    pub replace_cached_index_on_batch: bool,
     // Channels
     pub scan_tx: Option<Sender<ScanMsg>>,
     pub scan_rx: Receiver<ScanMsg>,
@@ -95,9 +134,7 @@ impl App {
 
         let scan_epoch = Arc::new(AtomicU64::new(0));
 
-        // Spawn artwork inspector worker pool (4 workers)
-        let artwork_job_tx =
-            artwork::spawn_inspector_pool(scan_epoch.clone(), artwork_tx_chan, 4);
+        let artwork_job_tx = artwork::spawn_inspector_pool(scan_epoch.clone(), artwork_tx_chan, 1);
 
         let has_root = cfg
             .library_root
@@ -111,23 +148,28 @@ impl App {
         let mut status_line = String::new();
 
         // Load disk cache for instant startup
-        if let Some(ref root) = cfg.library_root
-            && let Some(cached) = cache::load_cache(root)
-        {
-            albums = cached;
-            matcher.replace_items(albums.clone());
-            matcher.query("");
-            filtered = matcher.results();
-            status_line = format!("Loaded {} albums instantly from cache", albums.len());
+        if let Some(root) = cfg.library_root.as_ref() {
+            match cache::load_cache(root, &cfg.cache) {
+                Ok(Some(cached)) => {
+                    albums = cached;
+                    matcher.replace_items(albums.clone());
+                    matcher.query("");
+                    filtered = matcher.results();
+                    status_line = format!("Loaded {} albums from cache", albums.len());
 
-            // Queue initial artwork inspection for cached items
-            let epoch = scan_epoch.load(Ordering::Relaxed);
-            for album in &albums {
-                let _ = artwork_job_tx.send(InspectJob {
-                    epoch,
-                    dir: album.dir.clone(),
-                    tracks: album.tracks.clone(),
-                });
+                    let epoch = scan_epoch.load(Ordering::Relaxed);
+                    for album in &albums {
+                        let _ = artwork_job_tx.send(InspectJob {
+                            epoch,
+                            dir: album.dir.clone(),
+                            tracks: album.tracks.clone(),
+                        });
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    status_line = format!("Ignoring unreadable cache: {error}");
+                }
             }
         }
 
@@ -150,6 +192,7 @@ impl App {
             scan_epoch,
             status_line,
             is_scanning: false,
+            replace_cached_index_on_batch: false,
             scan_tx: Some(scan_tx),
             scan_rx,
             artwork_tx: Some(artwork_job_tx),
@@ -159,6 +202,8 @@ impl App {
         // If no cache was loaded, start disk scan immediately
         if app.screen != Screen::FirstRun && app.albums.is_empty() {
             app.start_scan();
+        } else if app.cfg.cache.refresh == CacheRefresh::Startup {
+            app.start_cache_refresh();
         }
 
         Ok(app)
@@ -166,6 +211,17 @@ impl App {
 
     /// Start (or restart) the recursive library scan.
     pub fn start_scan(&mut self) {
+        self.clear_index();
+        self.replace_cached_index_on_batch = false;
+        self.begin_scan();
+    }
+
+    fn start_cache_refresh(&mut self) {
+        self.replace_cached_index_on_batch = true;
+        self.begin_scan();
+    }
+
+    fn begin_scan(&mut self) {
         let epoch = self.scan_epoch.fetch_add(1, Ordering::Relaxed) + 1;
         let cancel = self.scan_epoch.clone();
         let tx = self.scan_tx.clone().unwrap();
@@ -179,6 +235,12 @@ impl App {
         }
     }
 
+    fn clear_index(&mut self) {
+        self.albums.clear();
+        self.filtered.clear();
+        self.matcher.replace_items(Vec::new());
+    }
+
     /// Handle a scan message.
     pub fn handle_scan(&mut self, msg: ScanMsg) {
         match msg {
@@ -186,6 +248,11 @@ impl App {
                 if epoch != self.scan_epoch.load(Ordering::Relaxed) {
                     return; // stale
                 }
+                if self.replace_cached_index_on_batch {
+                    self.clear_index();
+                    self.replace_cached_index_on_batch = false;
+                }
+
                 let arc_albums: Vec<Arc<Album>> = albums.iter().cloned().map(Arc::new).collect();
 
                 // Dispatch artwork inspection jobs to worker pool
@@ -213,12 +280,16 @@ impl App {
                 if epoch != self.scan_epoch.load(Ordering::Relaxed) {
                     return;
                 }
+                if self.replace_cached_index_on_batch {
+                    self.clear_index();
+                    self.replace_cached_index_on_batch = false;
+                }
                 self.is_scanning = false;
                 self.status_line = format!("{} albums indexed", total);
 
                 // Save updated index to cache for future instant launches
                 if let Some(ref root) = self.cfg.library_root {
-                    let _ = cache::save_cache(root, &self.albums);
+                    let _ = cache::save_cache(root, &self.albums, &self.cfg.cache);
                 }
             }
         }
@@ -255,20 +326,18 @@ impl App {
     fn handle_key(&mut self, key: KeyEvent) -> Action {
         match &self.screen {
             Screen::Finder => self.handle_finder_key(key),
-            Screen::Form(_) => {
-                let mut form = match std::mem::replace(&mut self.screen, Screen::Finder) {
-                    Screen::Form(f) => f,
+            Screen::Settings(_) => {
+                let mut settings = match std::mem::replace(&mut self.screen, Screen::Finder) {
+                    Screen::Settings(settings) => settings,
                     _ => unreachable!(),
                 };
-                let selected_dir = self.filtered.get(self.selected).map(|a| a.dir.clone());
-                let leaves_form = matches!(key.code, KeyCode::Enter | KeyCode::Esc);
-                let action = Self::handle_form_key(&mut form, selected_dir, key);
-                if !leaves_form {
-                    self.screen = Screen::Form(form);
+                let (action, close) = self.handle_settings_key(&mut settings, key);
+                if !close {
+                    self.screen = Screen::Settings(settings);
                 }
                 action
             }
-            Screen::Help | Screen::Log | Screen::Doctor => match key.code {
+            Screen::Help => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') | KeyCode::Enter => {
                     self.screen = Screen::Finder;
                     Action::None
@@ -323,130 +392,23 @@ impl App {
                 }
                 KeyCode::Char('e') => {
                     if let Some(album) = self.filtered.get(self.selected) {
-                        self.status_line =
-                            format!("🚀 Launched COV (embed) for {}", album.display);
+                        self.status_line = format!("🚀 Launched COV (embed) for {}", album.display);
                         return Action::Launch {
                             album_dir: album.dir.clone(),
                             embed: true,
-                            artist: None,
-                            album: None,
-                            identifier: None,
-                            country: None,
-                            resolution: None,
-                            sources: None,
                         };
                     }
                     return Action::None;
                 }
                 KeyCode::Char('s') => {
-                    // Swinsian current track shortcut
-                    match macos::swinsian_track_path() {
-                        Ok(p) => {
-                            let path_buf = PathBuf::from(&p);
-                            let parent = path_buf.parent().unwrap_or(&path_buf).to_path_buf();
-                            self.status_line = format!("🚀 Launched COV (Swinsian) for {}", p);
-                            return Action::Launch {
-                                album_dir: parent,
-                                embed: false,
-                                artist: None,
-                                album: None,
-                                identifier: None,
-                                country: None,
-                                resolution: None,
-                                sources: None,
-                            };
-                        }
-                        Err(e) => {
-                            self.status_line = format!("Swinsian error: {e}");
-                            return Action::None;
-                        }
+                    if let Some(album) = self.filtered.get(self.selected) {
+                        self.status_line = format!("Launched COV for {}", album.display);
+                        return Action::Launch {
+                            album_dir: album.dir.clone(),
+                            embed: false,
+                        };
                     }
-                }
-                KeyCode::Char('w') => {
-                    // Finder current selection shortcut
-                    match macos::finder_selection() {
-                        Ok(p) => {
-                            let path_buf = PathBuf::from(&p);
-                            let parent = if path_buf.is_dir() {
-                                path_buf
-                            } else {
-                                path_buf.parent().unwrap_or(&path_buf).to_path_buf()
-                            };
-                            self.status_line = format!("🚀 Launched COV (Finder) for {}", p);
-                            return Action::Launch {
-                                album_dir: parent,
-                                embed: false,
-                                artist: None,
-                                album: None,
-                                identifier: None,
-                                country: None,
-                                resolution: None,
-                                sources: None,
-                            };
-                        }
-                        Err(e) => {
-                            self.status_line = format!("Finder error: {e}");
-                            return Action::None;
-                        }
-                    }
-                }
-                KeyCode::Char('k') => {
-                    // Clipboard path shortcut
-                    match macos::pbpaste() {
-                        Ok(clip) => {
-                            let trimmed = clip.trim();
-                            let expanded = crate::paths::expand_tilde(trimmed);
-                            if expanded.exists() {
-                                let parent = if expanded.is_dir() {
-                                    expanded
-                                } else {
-                                    expanded.parent().unwrap_or(&expanded).to_path_buf()
-                                };
-                                self.status_line =
-                                    format!("🚀 Launched COV (Clipboard) for {}", trimmed);
-                                return Action::Launch {
-                                    album_dir: parent,
-                                    embed: false,
-                                    artist: None,
-                                    album: None,
-                                    identifier: None,
-                                    country: None,
-                                    resolution: None,
-                                    sources: None,
-                                };
-                            } else {
-                                self.status_line =
-                                    format!("Clipboard path not found: {}", trimmed);
-                                return Action::None;
-                            }
-                        }
-                        Err(e) => {
-                            self.status_line = format!("Clipboard error: {e}");
-                            return Action::None;
-                        }
-                    }
-                }
-                KeyCode::Char('g') => {
-                    // Native folder chooser shortcut
-                    match macos::choose_folder() {
-                        Ok(p) => {
-                            let parent = PathBuf::from(&p);
-                            self.status_line = format!("🚀 Launched COV (Folder Picker) for {}", p);
-                            return Action::Launch {
-                                album_dir: parent,
-                                embed: false,
-                                artist: None,
-                                album: None,
-                                identifier: None,
-                                country: None,
-                                resolution: None,
-                                sources: None,
-                            };
-                        }
-                        Err(_) => {
-                            return Action::None; // User cancelled picker
-                        }
-                    }
+                    return Action::None;
                 }
                 KeyCode::Char('f') => {
                     self.filter = self.filter.next();
@@ -461,21 +423,13 @@ impl App {
                     return Action::Rescan;
                 }
                 KeyCode::Char('o') => {
-                    self.screen = Screen::Form(FormState::default());
-                    return Action::None;
-                }
-                KeyCode::Char('l') => {
-                    self.screen = Screen::Log;
-                    return Action::None;
-                }
-                KeyCode::Char('d') => {
-                    self.screen = Screen::Doctor;
+                    self.screen = Screen::Settings(SettingsState::from_config(&self.cfg));
                     return Action::None;
                 }
                 KeyCode::Char('c') => {
                     return Action::Quit;
                 }
-                _ => {}
+                _ => return Action::None,
             }
         }
 
@@ -530,13 +484,7 @@ impl App {
                     self.status_line = format!("🚀 Launched COV for {}", album.display);
                     return Action::Launch {
                         album_dir: album.dir.clone(),
-                        embed: false,
-                        artist: None,
-                        album: None,
-                        identifier: None,
-                        country: None,
-                        resolution: None,
-                        sources: None,
+                        embed: self.cfg.default_mode == Mode::Embed,
                     };
                 }
                 Action::None
@@ -565,82 +513,112 @@ impl App {
         }
     }
 
-    fn handle_form_key(
-        form: &mut FormState,
-        selected_album_dir: Option<PathBuf>,
+    fn handle_settings_key(
+        &mut self,
+        settings: &mut SettingsState,
         key: KeyEvent,
-    ) -> Action {
-        let fields = 7; // mode + 6 text fields
+    ) -> (Action, bool) {
         match key.code {
+            KeyCode::Esc => (Action::None, true),
+            KeyCode::Enter => (Action::None, self.save_settings(settings)),
             KeyCode::Tab | KeyCode::Down => {
-                form.focus = (form.focus + 1) % fields;
-                Action::None
+                settings.focus = settings.focus.next();
+                (Action::None, false)
             }
             KeyCode::BackTab | KeyCode::Up => {
-                form.focus = if form.focus == 0 {
-                    fields - 1
-                } else {
-                    form.focus - 1
+                settings.focus = settings.focus.previous();
+                (Action::None, false)
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char(' ')
+                if settings.focus == SettingsField::DefaultAction =>
+            {
+                settings.default_mode = match settings.default_mode {
+                    Mode::Save => Mode::Embed,
+                    Mode::Embed => Mode::Save,
                 };
-                Action::None
-            }
-            KeyCode::Enter => {
-                if let Some(album_dir) = selected_album_dir {
-                    let opt_str = |s: &str| {
-                        let trimmed = s.trim();
-                        if trimmed.is_empty() {
-                            None
-                        } else {
-                            Some(trimmed.to_string())
-                        }
-                    };
-                    Action::Launch {
-                        album_dir,
-                        embed: form.embed_mode,
-                        artist: opt_str(&form.artist),
-                        album: opt_str(&form.album),
-                        identifier: opt_str(&form.identifier),
-                        country: opt_str(&form.country),
-                        resolution: opt_str(&form.resolution),
-                        sources: opt_str(&form.sources),
-                    }
-                } else {
-                    Action::None
-                }
-            }
-            KeyCode::Esc => Action::None,
-            KeyCode::Char(' ') if form.focus == 0 => {
-                form.embed_mode = !form.embed_mode;
-                Action::None
-            }
-            KeyCode::Char(c) => {
-                let field = match form.focus {
-                    1 => &mut form.artist,
-                    2 => &mut form.album,
-                    3 => &mut form.identifier,
-                    4 => &mut form.country,
-                    5 => &mut form.resolution,
-                    6 => &mut form.sources,
-                    _ => return Action::None,
-                };
-                field.push(c);
-                Action::None
+                (Action::None, false)
             }
             KeyCode::Backspace => {
-                let field = match form.focus {
-                    1 => &mut form.artist,
-                    2 => &mut form.album,
-                    3 => &mut form.identifier,
-                    4 => &mut form.country,
-                    5 => &mut form.resolution,
-                    6 => &mut form.sources,
-                    _ => return Action::None,
-                };
-                field.pop();
-                Action::None
+                match settings.focus {
+                    SettingsField::Library => {
+                        settings.library_root.pop();
+                    }
+                    SettingsField::OutputName => {
+                        settings.output_basename.pop();
+                    }
+                    SettingsField::Resolution => {
+                        settings.resolution.pop();
+                    }
+                    SettingsField::Providers => {
+                        settings.sources.pop();
+                    }
+                    SettingsField::DefaultAction => {}
+                }
+                (Action::None, false)
             }
-            _ => Action::None,
+            KeyCode::Char(character) => {
+                match settings.focus {
+                    SettingsField::Library => settings.library_root.push(character),
+                    SettingsField::OutputName => settings.output_basename.push(character),
+                    SettingsField::Resolution => settings.resolution.push(character),
+                    SettingsField::Providers => settings.sources.push(character),
+                    SettingsField::DefaultAction => {}
+                };
+                (Action::None, false)
+            }
+            _ => (Action::None, false),
         }
+    }
+
+    fn save_settings(&mut self, settings: &SettingsState) -> bool {
+        let library_root = PathBuf::from(settings.library_root.trim());
+        if !library_root.is_dir() {
+            self.status_line = "Library folder does not exist".to_string();
+            return false;
+        }
+        if settings.output_basename.trim().is_empty()
+            || settings.output_basename.contains('/')
+            || settings.output_basename.contains('\\')
+        {
+            self.status_line = "Cover name must be a filename, not a path".to_string();
+            return false;
+        }
+        let resolution = match settings.resolution.trim() {
+            "" => None,
+            value => match value.parse::<u32>() {
+                Ok(value) if value > 0 => Some(value),
+                _ => {
+                    self.status_line = "Resolution must be a positive number".to_string();
+                    return false;
+                }
+            },
+        };
+        let sources = match settings.sources.trim() {
+            "" => None,
+            value if value.split(',').all(|source| !source.trim().is_empty()) => {
+                Some(value.to_string())
+            }
+            _ => {
+                self.status_line = "Providers must be comma-separated source IDs".to_string();
+                return false;
+            }
+        };
+        let library_changed = self.cfg.library_root.as_ref() != Some(&library_root);
+        self.cfg.library_root = Some(library_root);
+        self.cfg.default_mode = settings.default_mode;
+        self.cfg.output_basename = settings.output_basename.trim().to_string();
+        self.cfg.default_resolution = resolution;
+        self.cfg.default_sources = sources;
+        if let Err(error) = self.cfg.save() {
+            self.status_line = format!("Could not save settings: {error}");
+            return false;
+        }
+        if library_changed {
+            self.start_scan();
+        } else {
+            self.status_line = "Settings saved".to_string();
+        }
+        true
     }
 
     fn apply_filter(&mut self) {
@@ -662,16 +640,30 @@ impl App {
         }
     }
 
+    fn launch_cov(&mut self, opts: LaunchOptions) {
+        if let Err(error) = launcher::launch(&opts) {
+            self.status_line = format!("COV launch failed: {error:#}");
+        }
+    }
+
     /// Run the main TUI event loop.
     pub fn run(&mut self, debug: bool) -> anyhow::Result<()> {
         enable_raw_mode()?;
         let mut stderr = std::io::stderr();
-        execute!(stderr, EnterAlternateScreen)?;
+        if let Err(error) = execute!(stderr, EnterAlternateScreen) {
+            let _ = disable_raw_mode();
+            return Err(error.into());
+        }
 
         let backend = CrosstermBackend::new(stderr);
-        let mut terminal = Terminal::new(backend)?;
-        terminal.clear()?;
-
+        let mut terminal = match Terminal::new(backend) {
+            Ok(terminal) => terminal,
+            Err(error) => {
+                let _ = disable_raw_mode();
+                let _ = execute!(std::io::stderr(), LeaveAlternateScreen);
+                return Err(error.into());
+            }
+        };
         // Optional debug log
         if debug {
             // Could set up tracing here
@@ -681,11 +673,20 @@ impl App {
         let res = self.event_loop(&mut terminal);
 
         // Restore terminal
-        disable_raw_mode()?;
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-        terminal.show_cursor()?;
+        let cleanup = (|| -> anyhow::Result<()> {
+            disable_raw_mode()?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+            terminal.show_cursor()?;
+            Ok(())
+        })();
 
-        res
+        match res {
+            Ok(()) => cleanup,
+            Err(error) => {
+                cleanup?;
+                Err(error)
+            }
+        }
     }
 
     fn event_loop(
@@ -703,33 +704,26 @@ impl App {
                             Action::Rescan => {
                                 self.start_scan();
                             }
-                            Action::Launch {
-                                album_dir,
-                                embed,
-                                artist,
-                                album,
-                                identifier,
-                                country,
-                                resolution,
-                                sources,
-                            } => {
+                            Action::Launch { album_dir, embed } => {
                                 let path = album_dir.to_string_lossy().to_string();
                                 let opts = LaunchOptions {
                                     path,
                                     embed,
-                                    output: "cover".to_string(),
+                                    output: self.cfg.output_basename.clone(),
                                     covit: self.cfg.covit_path.clone(),
                                     log: self.cfg.log_path.clone(),
-                                    artist,
-                                    album,
-                                    identifier,
-                                    country,
-                                    resolution,
-                                    sources,
+                                    artist: None,
+                                    album: None,
+                                    identifier: None,
+                                    country: None,
+                                    resolution: self
+                                        .cfg
+                                        .default_resolution
+                                        .map(|value| value.to_string()),
+                                    sources: self.cfg.default_sources.clone(),
                                     foreground: false,
                                 };
-                                // Launch in background; ignore errors (logged in launcher)
-                                launcher::launch(&opts).ok();
+                                self.launch_cov(opts);
                             }
                             Action::None => {}
                         }
@@ -739,13 +733,17 @@ impl App {
                 }
             }
 
-            // Check scan channel
-            while let Ok(msg) = self.scan_rx.try_recv() {
+            for _ in 0..8 {
+                let Ok(msg) = self.scan_rx.try_recv() else {
+                    break;
+                };
                 self.reduce(AppMsg::Scan(msg));
             }
 
-            // Check artwork channel
-            while let Ok(msg) = self.artwork_rx.try_recv() {
+            for _ in 0..32 {
+                let Ok(msg) = self.artwork_rx.try_recv() else {
+                    break;
+                };
                 self.reduce(AppMsg::Artwork(msg));
             }
 
@@ -762,9 +760,7 @@ impl App {
     fn draw(&self, f: &mut ratatui::Frame) {
         match self.screen {
             Screen::Finder => screens::finder::draw(self, f),
-            Screen::Form(ref form) => screens::form::draw(self, f, form),
-            Screen::Log => screens::log::draw(self, f),
-            Screen::Doctor => screens::doctor::draw(self, f),
+            Screen::Settings(ref settings) => screens::settings::draw(self, f, settings),
             Screen::Help => screens::help::draw(self, f),
             Screen::FirstRun => screens::firstrun::draw(self, f),
         }
@@ -782,7 +778,7 @@ impl Filter {
     pub fn glyph(&self) -> &'static str {
         match self {
             Filter::All => "All",
-            Filter::Missing => "Missing",
+            Filter::Missing => "Needs Cover",
             Filter::NeedsEmbed => "Needs Embed",
         }
     }
@@ -804,8 +800,8 @@ mod tests {
     #[test]
     fn test_firstrun_clears_input_on_enter() {
         let temp = tempfile::tempdir().unwrap();
-        let mut cfg = Config::default();
-        cfg.library_root = None;
+        let config_path = temp.path().join("config.toml");
+        let cfg = Config::load_with_override(Some(&config_path)).unwrap();
 
         let mut app = App::new(cfg).unwrap();
         assert_eq!(app.screen, Screen::FirstRun);
@@ -815,44 +811,46 @@ mod tests {
         app.reduce(AppMsg::Key(key));
 
         assert_eq!(app.screen, Screen::Finder);
-        assert!(app.input.is_empty(), "input should be cleared on transition to Finder");
+        assert!(
+            app.input.is_empty(),
+            "input should be cleared on transition to Finder"
+        );
     }
 
     #[test]
-    fn test_form_key_returns_launch_action() {
-        let mut form = FormState {
-            embed_mode: true,
-            artist: " The Beatles ".to_string(),
-            album: "Abbey Road".to_string(),
-            ..Default::default()
-        };
-        let album_dir = PathBuf::from("/music/the_beatles/abbey_road");
+    fn test_failed_covit_launch_updates_the_status_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut cfg = Config::default();
+        cfg.covit_path = temp.path().join("missing-covit");
+        let mut app = App::new(cfg.clone()).unwrap();
 
-        let key = KeyEvent::from(KeyCode::Enter);
-        let action = App::handle_form_key(&mut form, Some(album_dir.clone()), key);
+        app.launch_cov(LaunchOptions {
+            path: temp.path().to_string_lossy().to_string(),
+            embed: false,
+            output: "cover".to_string(),
+            covit: cfg.covit_path,
+            log: cfg.log_path,
+            artist: None,
+            album: None,
+            identifier: None,
+            country: None,
+            resolution: None,
+            sources: None,
+            foreground: false,
+        });
 
-        if let Action::Launch {
-            album_dir: dir,
-            embed,
-            artist,
-            album,
-            ..
-        } = action
-        {
-            assert_eq!(dir, album_dir);
-            assert!(embed);
-            assert_eq!(artist, Some("The Beatles".to_string()));
-            assert_eq!(album, Some("Abbey Road".to_string()));
-        } else {
-            panic!("Expected Action::Launch, got {:?}", action);
-        }
+        assert!(app.status_line.starts_with("COV launch failed:"));
     }
 
     #[test]
     fn test_plain_arrow_navigation() {
         let cfg = Config::default();
         let mut app = App::new(cfg).unwrap();
-        app.filtered = vec![create_test_album("A1"), create_test_album("A2"), create_test_album("A3")];
+        app.filtered = vec![
+            create_test_album("A1"),
+            create_test_album("A2"),
+            create_test_album("A3"),
+        ];
         app.screen = Screen::Finder;
 
         assert_eq!(app.selected, 0);
@@ -868,7 +866,9 @@ mod tests {
     fn test_page_and_home_end_navigation() {
         let cfg = Config::default();
         let mut app = App::new(cfg).unwrap();
-        app.filtered = (0..25).map(|i| create_test_album(&format!("A{}", i))).collect();
+        app.filtered = (0..25)
+            .map(|i| create_test_album(&format!("A{}", i)))
+            .collect();
         app.screen = Screen::Finder;
 
         assert_eq!(app.selected, 0);
@@ -881,14 +881,72 @@ mod tests {
     }
 
     #[test]
-    fn test_form_arrow_field_navigation() {
-        let mut form = FormState::default();
-        assert_eq!(form.focus, 0);
+    fn finder_ignores_removed_context_shortcuts() {
+        let cfg = Config::default();
+        let mut app = App::new(cfg).unwrap();
+        app.screen = Screen::Finder;
+        app.status_line = "Ready".to_string();
 
-        App::handle_form_key(&mut form, None, KeyEvent::from(KeyCode::Down));
-        assert_eq!(form.focus, 1);
+        app.reduce(AppMsg::Key(KeyEvent::new(
+            KeyCode::Char('k'),
+            KeyModifiers::CONTROL,
+        )));
 
-        App::handle_form_key(&mut form, None, KeyEvent::from(KeyCode::Up));
-        assert_eq!(form.focus, 0);
+        assert_eq!(app.screen, Screen::Finder);
+        assert_eq!(app.status_line, "Ready");
+    }
+
+    #[test]
+    fn finder_launches_embed_for_selected_album() {
+        let cfg = Config::default();
+        let mut app = App::new(cfg).unwrap();
+        let album = create_test_album("A1");
+        app.filtered = vec![album.clone()];
+        app.screen = Screen::Finder;
+
+        let action = app.reduce(AppMsg::Key(KeyEvent::new(
+            KeyCode::Char('e'),
+            KeyModifiers::CONTROL,
+        )));
+
+        match action {
+            Action::Launch {
+                album_dir, embed, ..
+            } => {
+                assert_eq!(album_dir, album.dir);
+                assert!(embed);
+            }
+            other => panic!("expected an embed launch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn finder_opens_settings_with_control_o() {
+        let cfg = Config::default();
+        let mut app = App::new(cfg).unwrap();
+        app.screen = Screen::Finder;
+
+        app.reduce(AppMsg::Key(KeyEvent::new(
+            KeyCode::Char('o'),
+            KeyModifiers::CONTROL,
+        )));
+
+        assert!(matches!(app.screen, Screen::Settings(_)));
+    }
+
+    #[test]
+    fn finder_uses_embed_as_the_configured_default_action() {
+        let mut cfg = Config::default();
+        cfg.default_mode = crate::config::Mode::Embed;
+        let mut app = App::new(cfg).unwrap();
+        app.filtered = vec![create_test_album("A1")];
+        app.screen = Screen::Finder;
+
+        let action = app.reduce(AppMsg::Key(KeyEvent::from(KeyCode::Enter)));
+
+        match action {
+            Action::Launch { embed, .. } => assert!(embed),
+            other => panic!("expected a launch, got {other:?}"),
+        }
     }
 }

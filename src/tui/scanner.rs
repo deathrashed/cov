@@ -23,6 +23,8 @@ pub enum ScanMsg {
     Done { epoch: u64, total: usize },
 }
 
+const BATCH_SIZE: usize = 32;
+
 /// Spawn a background thread that recursively walks `root` and emits batches of albums.
 pub fn spawn_scan(
     root: PathBuf,
@@ -31,8 +33,9 @@ pub fn spawn_scan(
     tx: crossbeam::channel::Sender<ScanMsg>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        let mut albums: Vec<Album> = Vec::new();
-        let mut batch = Vec::new();
+        let mut batch = Vec::with_capacity(BATCH_SIZE);
+        let mut current_album: Option<Album> = None;
+        let mut total = 0usize;
 
         for entry in walkdir::WalkDir::new(&root)
             .follow_links(false)
@@ -79,71 +82,67 @@ pub fn spawn_scan(
                 None => continue,
             };
 
-            // Group tracks by parent directory
-            if let Some(last) = albums.last_mut()
-                && last.dir == parent
-            {
-                last.tracks.push(path.to_path_buf());
-                continue;
-            }
-
-            // Finalize previous batch if needed
-            if !albums.is_empty() {
-                // Sort tracks
-                if let Some(last) = albums.last_mut() {
-                    last.tracks.sort();
+            match current_album.as_mut() {
+                Some(album) if album.dir == parent => {
+                    album.tracks.push(path.to_path_buf());
+                }
+                Some(_) => {
+                    if let Some(mut album) = current_album.take() {
+                        album.tracks.sort();
+                        batch.push(album);
+                        total += 1;
+                        if batch.len() == BATCH_SIZE
+                            && tx
+                                .send(ScanMsg::Batch {
+                                    epoch,
+                                    albums: std::mem::take(&mut batch),
+                                })
+                                .is_err()
+                        {
+                            return;
+                        }
+                    }
+                    current_album = Some(new_album(parent, &root, path.to_path_buf()));
+                }
+                None => {
+                    current_album = Some(new_album(parent, &root, path.to_path_buf()));
                 }
             }
+        }
 
-            // Create new album entry
-            let rel = parent
-                .strip_prefix(&root)
-                .unwrap_or(&parent)
-                .to_string_lossy()
-                .to_string();
-            let display = display_name(&parent, &root);
-            albums.push(Album {
-                dir: parent,
-                rel,
-                display,
-                tracks: vec![path.to_path_buf()],
-            });
+        if let Some(mut album) = current_album {
+            album.tracks.sort();
+            batch.push(album);
+            total += 1;
+        }
 
-            // Emit batches of 200
-            if albums.len() >= 200 {
-                batch.push(ScanMsg::Batch {
+        if !batch.is_empty()
+            && tx
+                .send(ScanMsg::Batch {
                     epoch,
-                    albums: albums.split_off(0),
-                });
-            }
+                    albums: batch,
+                })
+                .is_err()
+        {
+            return;
         }
-
-        // Finalize last album's tracks
-        if let Some(last) = albums.last_mut() {
-            last.tracks.sort();
-        }
-
-        // Flush remaining
-        if !albums.is_empty() {
-            batch.push(ScanMsg::Batch { epoch, albums });
-        }
-
-        // Send done
-        batch.push(ScanMsg::Done {
-            epoch,
-            total: batch.iter().fold(0, |acc, msg| match msg {
-                ScanMsg::Batch { albums, .. } => acc + albums.len(),
-                _ => acc,
-            }),
-        });
-
-        // Send all messages
-        for msg in batch {
-            if tx.send(msg).is_err() {
-                return;
-            }
-        }
+        let _ = tx.send(ScanMsg::Done { epoch, total });
     })
+}
+
+fn new_album(dir: PathBuf, root: &std::path::Path, track: PathBuf) -> Album {
+    let rel = dir
+        .strip_prefix(root)
+        .unwrap_or(&dir)
+        .to_string_lossy()
+        .to_string();
+    let display = display_name(&dir, root);
+    Album {
+        dir,
+        rel,
+        display,
+        tracks: vec![track],
+    }
 }
 
 fn display_name(path: &std::path::Path, root: &std::path::Path) -> String {

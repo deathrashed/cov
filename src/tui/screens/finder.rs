@@ -1,10 +1,10 @@
 use crate::tui::app::App;
 use crate::tui::widgets;
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 pub fn draw(app: &App, f: &mut Frame) {
@@ -48,10 +48,7 @@ pub fn draw(app: &App, f: &mut Frame) {
     }
 
     // Position terminal cursor right after input text
-    f.set_cursor_position((
-        input_inner.x + 2 + app.cursor as u16,
-        input_inner.y,
-    ));
+    f.set_cursor_position((input_inner.x + 2 + app.cursor as u16, input_inner.y));
 
     // Main content: list + preview
     let main_chunks = Layout::default()

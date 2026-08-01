@@ -1,11 +1,13 @@
 use clap::Parser;
-use cov::cli::{self, Cli, Command, EmbedArgs, LogMode, Mode, OpenArgs};
+use cov::cli::{self, Cli, Command, EmbedArgs, LogMode, Mode, OpenArgs, ScanArgs, ScanCommand};
 use cov::config::Config;
 use cov::doctor;
 use cov::embed;
 use cov::launcher::{self, LaunchOptions};
 use cov::macos;
 use cov::paths;
+use cov::scan;
+use std::io::Write;
 use std::path::PathBuf;
 
 fn main() {
@@ -37,6 +39,7 @@ fn subcommand_name(cmd: &Command) -> &'static str {
         Command::Clipboard { .. } => "clipboard",
         Command::Log { .. } => "log",
         Command::Doctor => "doctor",
+        Command::Scan(_) => "scan",
         Command::Tui(_) => "tui",
         Command::Ghostty => "ghostty",
     }
@@ -73,8 +76,45 @@ fn dispatch(cli: &Cli, cfg: &Config) -> anyhow::Result<()> {
         }
         Command::Log { mode } => cmd_log(*mode, cfg),
         Command::Doctor => cmd_doctor(cfg),
+        Command::Scan(args) => cmd_scan(args, cfg),
         Command::Tui(args) => cmd_tui(args, cfg, cli.debug),
         Command::Ghostty => cmd_ghostty(),
+    }
+}
+
+fn cmd_scan(args: &ScanArgs, cfg: &Config) -> anyhow::Result<()> {
+    let configured_root = match &args.command {
+        ScanCommand::MissingSidecar { root } | ScanCommand::MissingEmbedded { root } => {
+            root.as_ref().or(cfg.library_root.as_ref())
+        }
+    };
+    let root = configured_root
+        .map(|path| cov::paths::expand_tilde(&path.to_string_lossy()))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No library root configured. Pass ROOT or set library_root in the config."
+            )
+        })?;
+    let stdout = std::io::stdout();
+    let mut output = stdout.lock();
+    let mut print_path = |path: &std::path::Path| -> anyhow::Result<()> {
+        writeln!(output, "{}", path.display()).map_err(anyhow::Error::from)
+    };
+
+    let result = match &args.command {
+        ScanCommand::MissingSidecar { .. } => scan::missing_sidecar(&root, &mut print_path),
+        ScanCommand::MissingEmbedded { .. } => scan::missing_embedded(&root, &mut print_path),
+    };
+
+    match result {
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io_error| io_error.kind() == std::io::ErrorKind::BrokenPipe) =>
+        {
+            Ok(())
+        }
+        other => other,
     }
 }
 
@@ -87,15 +127,21 @@ fn cmd_open(args: &OpenArgs, cfg: &Config) -> anyhow::Result<()> {
     let opts = LaunchOptions {
         path: args.path.clone(),
         embed: args.embed,
-        output: args.output.clone(),
+        output: args
+            .output
+            .clone()
+            .unwrap_or_else(|| cfg.output_basename.clone()),
         covit: args.covit.clone().unwrap_or_else(|| cfg.covit_path.clone()),
         log: args.log.clone().unwrap_or_else(|| cfg.log_path.clone()),
         artist: args.artist.clone(),
         album: args.album.clone(),
         identifier: args.identifier.clone(),
         country: args.country.clone(),
-        resolution: args.resolution.clone(),
-        sources: args.sources.clone(),
+        resolution: args
+            .resolution
+            .clone()
+            .or_else(|| cfg.default_resolution.map(|value| value.to_string())),
+        sources: args.sources.clone().or_else(|| cfg.default_sources.clone()),
         foreground: args.foreground,
     };
     let (_audio_path, argv) = launcher::launch(&opts)?;
@@ -228,6 +274,15 @@ fn cmd_tui(args: &cli::TuiArgs, cfg: &Config, debug: bool) -> anyhow::Result<()>
     let mut app_cfg = cfg.clone();
     if let Some(ref lib) = args.library {
         app_cfg.library_root = Some(lib.clone());
+    }
+    if args.no_cache {
+        app_cfg.cache.enabled = false;
+    }
+    if let Some(path) = &args.cache_path {
+        app_cfg.cache.path = Some(path.clone());
+    }
+    if args.rescan {
+        app_cfg.cache.refresh = cov::config::CacheRefresh::Startup;
     }
     cov::tui::run(app_cfg, debug)
 }

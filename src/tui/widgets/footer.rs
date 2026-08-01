@@ -1,26 +1,26 @@
+use crate::config::Mode;
 use crate::tui::app::App;
 use ratatui::{
+    Frame,
     layout::Rect,
     text::{Line, Span},
     widgets::Paragraph,
-    Frame,
 };
 
 pub fn draw(app: &App, f: &mut Frame, area: Rect) {
     let theme = &app.theme;
 
+    let default_action = match app.cfg.default_mode {
+        Mode::Save => "save cover",
+        Mode::Embed => "save + embed",
+    };
     let items = [
-        ("Enter", "save"),
-        ("^E", "embed"),
-        ("^S", "swinsian"),
-        ("^W", "finder"),
-        ("^K", "clipboard"),
-        ("^P", "pick folder"),
-        ("^O", "options"),
+        ("Enter", default_action),
+        ("^S", "save cover"),
+        ("^E", "open + embed"),
         ("^F", "filter"),
-        ("^R", "rescan"),
-        ("^L", "log"),
-        ("^D", "doctor"),
+        ("^R", "refresh index"),
+        ("^O", "settings"),
         ("?", "help"),
         ("q", "quit"),
     ];

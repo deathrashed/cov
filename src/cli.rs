@@ -57,10 +57,32 @@ pub enum Command {
     },
     /// Check environment
     Doctor,
+    /// Scan a music library for missing artwork
+    Scan(ScanArgs),
     /// Launch the interactive TUI
     Tui(TuiArgs),
     /// Open the TUI in a dedicated Ghostty window
     Ghostty,
+}
+
+#[derive(clap::Args)]
+pub struct ScanArgs {
+    #[command(subcommand)]
+    pub command: ScanCommand,
+}
+
+#[derive(clap::Subcommand)]
+pub enum ScanCommand {
+    /// Print album directories that contain audio but no cover sidecar
+    MissingSidecar {
+        /// Music library root (defaults to configured library_root)
+        root: Option<PathBuf>,
+    },
+    /// Print audio files without embedded front or other cover artwork
+    MissingEmbedded {
+        /// Music library root (defaults to configured library_root)
+        root: Option<PathBuf>,
+    },
 }
 
 #[derive(clap::Args)]
@@ -71,8 +93,7 @@ pub struct OpenArgs {
     #[arg(long)]
     pub embed: bool,
     /// Output basename for cover file (default: cover)
-    #[arg(long, default_value = "cover")]
-    pub output: String,
+    pub output: Option<String>,
     /// Path to covit binary
     #[arg(long)]
     pub covit: Option<PathBuf>,
@@ -121,6 +142,15 @@ pub struct TuiArgs {
     /// Music library root (overrides config)
     #[arg(long)]
     pub library: Option<PathBuf>,
+    /// Do not load or write the library index cache
+    #[arg(long)]
+    pub no_cache: bool,
+    /// Path for the library index cache file
+    #[arg(long)]
+    pub cache_path: Option<PathBuf>,
+    /// Refresh the index in the background after loading a cache
+    #[arg(long)]
+    pub rescan: bool,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]

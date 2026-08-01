@@ -6,5 +6,6 @@ pub mod embed;
 pub mod launcher;
 pub mod macos;
 pub mod paths;
+pub mod scan;
 pub mod testutil;
 pub mod tui;

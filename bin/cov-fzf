@@ -1,29 +1,64 @@
 #!/bin/zsh
 set -eu
 
-MUSIC_DIR="${1:-${COV_LIBRARY_ROOT:-${MUSIC_DIR:-}}}"
+SCRIPT_DIR=${0:A:h}
+library_root=${COV_LIBRARY_ROOT:-${MUSIC_DIR:-}}
 
-if [[ -z "$MUSIC_DIR" || ! -d "$MUSIC_DIR" ]]; then
-    CONFIG_FILE="${HOME}/.config/cov/config.toml"
-    if [[ -f "$CONFIG_FILE" ]]; then
-        MUSIC_DIR=$(grep 'library_root' "$CONFIG_FILE" | cut -d'=' -f2 | tr -d ' "' || true)
+if [[ "${1:-}" == "--library" ]]; then
+    [[ $# -ge 2 ]] || { print -u2 "Usage: cov-fzf [--library DIRECTORY] [query]"; exit 2; }
+    library_root=$2
+    shift 2
+fi
+
+query=${1:-}
+
+if [[ -z "$library_root" || ! -d "$library_root" ]]; then
+    config_file="${HOME}/Library/Application Support/xyz.musichoarders.cov/config.toml"
+    if [[ -f "$config_file" ]]; then
+        library_root=$(awk -F ' = ' '/^library_root[[:space:]]*=/ { gsub(/^[ \t\"]+|[ \t\"]+$/, "", $2); print $2; exit }' "$config_file")
     fi
 fi
 
-if [[ -z "$MUSIC_DIR" || ! -d "$MUSIC_DIR" ]]; then
-    echo "ERROR: Music directory not found. Set MUSIC_DIR or configure library_root in ~/.config/cov/config.toml"
+if [[ -z "$library_root" || ! -d "$library_root" ]]; then
+    print -u2 "ERROR: Set COV_LIBRARY_ROOT (or MUSIC_DIR), use --library, or configure library_root."
     exit 1
 fi
 
-SCRIPT_DIR=${0:A:h}
-COV_BIN="$SCRIPT_DIR/cov"
+(( $+commands[fd] )) || { print -u2 "ERROR: cov-fzf requires fd."; exit 1; }
+(( $+commands[fzf] )) || { print -u2 "ERROR: cov-fzf requires fzf."; exit 1; }
 
-env FZF_DEFAULT_OPTS= fd -t d . "$MUSIC_DIR" 2>/dev/null | fzf \
-  --prompt=" COV ❯ " \
-  --header="Enter: Open COV | Ctrl+E: Open & Embed | Ctrl+O: Finder | Ctrl+Y: Copy Path" \
-  --preview='eza --tree --color=always {} 2>/dev/null | head -200 || ls -la {}' \
-  --preview-window='right:40%:wrap' \
-  --bind="enter:execute($COV_BIN open {})+abort" \
-  --bind="ctrl-e:execute($COV_BIN open --embed {})+abort" \
-  --bind="ctrl-o:execute(open -R {})+abort" \
-  --bind="ctrl-y:execute(echo -n {} | pbcopy)+abort"
+cov_bin=${COV_BIN:-"$SCRIPT_DIR/cov"}
+if [[ ! -x "$cov_bin" ]]; then
+    cov_bin=${commands[cov]:-}
+fi
+[[ -n "$cov_bin" && -x "$cov_bin" ]] || { print -u2 "ERROR: cov executable not found."; exit 1; }
+
+case "${COV_FZF_PREVIEW_MODE:-top}" in
+    top) preview_window='top:50%:wrap' ;;
+    right) preview_window='right:40%:wrap' ;;
+    off) preview_window='hidden' ;;
+    *) preview_window='top:50%:wrap' ;;
+esac
+
+preview='eza --tree --color=always {} 2>/dev/null | head -200 || ls -la {}'
+header='Ctrl-O:Open  Ctrl-R:Reveal  Ctrl-Y:Copy  Ctrl-G:COV  Ctrl-E:COV + Embed  /:Preview  Enter:Finder'
+
+result=$(
+    fd -t d . "$library_root" 2>/dev/null | fzf \
+        --exact \
+        --query="$query" \
+        --prompt=" ❯ " \
+        --header="$header" \
+        --preview="$preview" \
+        --preview-window="$preview_window" \
+        --bind='ctrl-o:execute(open {})+abort' \
+        --bind='ctrl-r:execute(open -R {})+abort' \
+        --bind='ctrl-y:execute(echo -n {} | pbcopy)+abort' \
+        --bind="ctrl-g:execute(\"$cov_bin\" open {})+abort" \
+        --bind="ctrl-e:execute(\"$cov_bin\" open --embed {})+abort"
+)
+
+if [[ -n "$result" ]]; then
+    selected=${result%%$'\n'*}
+    open "$selected"
+fi
